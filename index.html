@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Travel Magnet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,600;1,600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
+<style>
+/* ── Reset ─────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  /* ── DESIGN.md color tokens ─────────────────────────────── */
+  --bg:    #f5f0e8;   /* surface */
+  --cream: #faf7f2;   /* surface-container-low */
+  --sand:  #e8dfd0;   /* surface-dim / surface-container-high */
+  --clay:  #c07a4f;   /* primary */
+  --clay-l:#d4956d;   /* inverse-primary */
+  --brown: #3d2c1e;   /* on-surface */
+  --muted: #a8917c;   /* on-surface-variant */
+  --bdr:   #d4c4ad;   /* outline */
+  --white: #ffffff;   /* surface-container-lowest */
+  --dark:  #08090f;
+
+  /* ── DESIGN.md rounded tokens ───────────────────────────── */
+  --r-sm:  8px;    /* rounded.sm */
+  --r-def: 12px;   /* rounded.DEFAULT */
+  --r-md:  16px;   /* rounded.md */
+  --r-lg:  18px;   /* rounded.lg */
+  --r-xl:  24px;   /* rounded.xl */
+
+  /* ── DESIGN.md spacing tokens ───────────────────────────── */
+  --sp-xs: 4px;
+  --sp-sm: 12px;
+  --sp-md: 16px;
+  --sp-lg: 24px;
+  --sp-xl: 40px;
+
+  /* ── Shadows (warm brown undertones per DESIGN.md) ──────── */
+  --sh-sm: 0 1px 6px rgba(60,40,20,.08);
+  --sh-md: 0 4px 20px rgba(60,40,20,.13);
+  --sh-mag:0 6px 22px rgba(60,40,20,.18), 0 1px 4px rgba(60,40,20,.10), inset 0 1px 0 rgba(255,255,255,.8);
+}
+html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
+  font-family:'DM Sans',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;background:var(--bg);}
+#app{width:100%;height:100vh;height:100dvh;max-width:430px;margin:0 auto;
+  position:relative;overflow:hidden;background:var(--bg);}
+
+/* Paper grain */
+#app::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:1000;
+  opacity:.028;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");}
+
+/* ── Scroll ─────────────────────────────────────────────────── */
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
+.scroll::-webkit-scrollbar{display:none;}
+
+/* ── Status bar ─────────────────────────────────────────────── */
+.sb{height:calc(44px + env(safe-area-inset-top));display:flex;align-items:flex-end;
+  justify-content:space-between;
+  padding:0 20px calc(4px) 20px;
+  padding-top:env(safe-area-inset-top);
+  flex-shrink:0;}
+.sb-time{font-size:15px;font-weight:700;}
+
+/* ── Bottom nav — floating glass pill ───────────────────────── */
+.bnav{position:absolute;bottom:max(14px, env(safe-area-inset-bottom));left:14px;right:14px;height:64px;
+  background:rgba(245,240,232,.52);
+  border-radius:22px;
+  border:1px solid rgba(255,255,255,.55);
+  display:flex;align-items:center;justify-content:space-around;
+  padding:0 8px;z-index:200;
+  backdrop-filter:blur(28px) saturate(1.6);
+  -webkit-backdrop-filter:blur(28px) saturate(1.6);
+  box-shadow:
+    0 8px 32px rgba(60,40,20,.16),
+    0 2px 8px  rgba(60,40,20,.08),
+    inset 0 1px 0 rgba(255,255,255,.72),
+    inset 0 -1px 0 rgba(200,170,130,.12);}
+.bnav-tab{display:flex;flex-direction:column;align-items:center;
+  gap:4px;cursor:pointer;padding:8px 18px;border-radius:14px;
+  transition:background .14s;min-width:60px;}
+.bnav-tab:active{background:rgba(192,122,79,.09);}
+.bnav-lbl{font-size:10px;font-weight:400;color:var(--muted);letter-spacing:.1px;}
+.bnav-tab.on .bnav-lbl{color:var(--clay);}
+.bnav-tab.on svg{stroke:var(--clay);}
+
+/* Center FAB */
+.bnav-fab{width:54px;height:54px;border-radius:50%;
+  background:linear-gradient(145deg,var(--clay-l),var(--clay));
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 5px 20px rgba(192,122,79,.42);
+  transition:transform .14s,box-shadow .14s;flex-shrink:0;}
+.bnav-fab:active{transform:scale(.92);box-shadow:0 3px 12px rgba(192,122,79,.28);}
+
+/* ── Section label ──────────────────────────────────────────── */
+.sec{font-size:12px;font-weight:500;color:var(--muted);
+  letter-spacing:0;padding:0 18px 10px;}
+
+/* ── Toast ──────────────────────────────────────────────────── */
+.toast-el{position:fixed;bottom:calc(96px + env(safe-area-inset-bottom));left:50%;
+  transform:translateX(-50%) translateY(14px);
+  background:rgba(40,25,12,.88);backdrop-filter:blur(16px);
+  border-radius:12px;padding:10px 18px;font-size:13px;font-weight:600;
+  color:white;z-index:999;opacity:0;transition:opacity .25s,transform .25s;
+  pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:8px;}
+.toast-el.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCREEN: MAP  (root)
+═══════════════════════════════════════════════════════════════ */
+#scr-map{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);}
+
+/* ── Map top bar ────────────────────────────────────────────── */
+.map-topbar{display:flex;align-items:center;padding:0 16px 14px;gap:10px;flex-shrink:0;}
+.map-logo{font-size:20px;font-weight:600;letter-spacing:-.01em;
+  font-family:'Lora',Georgia,serif;
+  font-style:italic;color:var(--brown);}
+.map-logo-sub{font-size:11px;color:var(--muted);font-weight:400;margin-top:2px;}
+
+/* Breadcrumb */
+.breadcrumb{flex:1;display:flex;align-items:center;gap:5px;
+  font-size:13px;font-weight:600;color:var(--muted);min-width:0;}
+.bc-item{white-space:nowrap;cursor:pointer;color:var(--clay);}
+.bc-item:last-child{color:var(--brown);cursor:default;}
+.bc-sep{opacity:.4;font-size:11px;}
+.bc-back{width:32px;height:32px;border-radius:var(--r-def);background:var(--sand);
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:background .14s;margin-right:2px;}
+.bc-back:active{background:#ddd4c4;}
+
+
+/* ── Geo prompt overlay ─────────────────────────────────────── */
+.geo-prompt{margin:0 var(--sp-md) 14px;border-radius:var(--r-md);
+  background:rgba(255,252,248,.9);border:1px solid rgba(192,122,79,.18);
+  padding:11px 14px;display:flex;align-items:center;gap:10px;
+  box-shadow:0 2px 10px rgba(192,122,79,.06);flex-shrink:0;}
+.geo-dot-wrap{width:24px;height:24px;border-radius:50%;
+  background:rgba(192,122,79,.09);display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;}
+.geo-dot{width:7px;height:7px;border-radius:50%;background:var(--clay);
+  animation:gpulse 2.4s infinite;}
+@keyframes gpulse{0%,100%{box-shadow:0 0 0 0 rgba(192,122,79,.4);}
+  55%{box-shadow:0 0 0 6px rgba(192,122,79,0);}}
+.geo-txt{flex:1;}
+.geo-txt strong{display:block;font-size:13px;font-weight:600;color:var(--brown);}
+.geo-txt span{font-size:11px;color:var(--muted);font-weight:400;}
+.geo-cta{background:transparent;color:var(--clay);border:1px solid rgba(192,122,79,.35);
+  border-radius:var(--r-sm);padding:6px 11px;font-size:12px;font-weight:500;
+  cursor:pointer;white-space:nowrap;}
+
+/* ── World level: stats strip ───────────────────────────────── */
+.stats-strip{display:flex;align-items:baseline;padding:0 20px 18px;flex-shrink:0;gap:6px;}
+.stat-sentence{font-size:13px;color:var(--muted);font-weight:400;line-height:1.5;}
+.stat-sentence strong{font-size:14px;font-weight:700;color:var(--brown);}
+
+/* ── World: country grid ────────────────────────────────────── */
+.country-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:0 16px;}
+.cg-card{display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;}
+.cg-card:nth-child(odd) .cg-photo{transform:rotate(-0.7deg);}
+.cg-card:nth-child(even) .cg-photo{transform:rotate(0.6deg);}
+.cg-card:active .cg-photo{opacity:.78;transform:scale(.97) rotate(0)!important;}
+.cg-photo{width:100%;aspect-ratio:3/4;border-radius:var(--r-lg);
+  background-image:repeating-linear-gradient(88deg,transparent,transparent 28px,
+    rgba(255,255,255,.15) 28px,rgba(255,255,255,.15) 29px),
+    linear-gradient(170deg,#ede6d8 0%,#e0d5c2 100%);
+  border:1.5px solid var(--bdr);position:relative;overflow:hidden;
+  transition:opacity .15s,transform .2s;
+  box-shadow:0 4px 16px rgba(60,40,20,.12),0 1px 3px rgba(60,40,20,.08);}
+.cg-photo::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 55% 25%,rgba(255,255,255,.35),transparent 65%);
+  pointer-events:none;}
+.cg-photo.filled{background-image:none;}
+.cg-photo.filled img{width:100%;height:100%;object-fit:cover;display:block;}
+.cg-add{background:#ede8e0!important;background-image:none!important;
+  border-style:dashed!important;border-color:rgba(160,130,90,.25)!important;
+  box-shadow:none!important;}
+.cg-add::before{display:none;}
+.cg-add-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+.cg-lbl{text-align:center;}
+.cg-name{font-size:13px;font-weight:600;color:var(--brown);}
+.cg-count{font-size:11px;color:var(--muted);font-weight:400;margin-top:1px;font-style:italic;}
+
+/* ── Country level: cities ──────────────────────────────────── */
+.visit-pills{display:flex;gap:10px;padding:0 18px 16px;flex-shrink:0;}
+.vpill{background:var(--white);border:1px solid var(--bdr);
+  border-radius:10px;padding:8px 14px;font-size:12px;color:var(--muted);font-weight:600;}
+.vpill strong{display:block;font-size:18px;font-weight:800;color:var(--clay);}
+.city-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px 20px;}
+.city-tile{border-radius:14px;overflow:hidden;cursor:pointer;position:relative;
+  aspect-ratio:1;background:var(--sand);box-shadow:var(--sh-sm);
+  border:1px solid var(--bdr);transition:transform .15s;}
+.city-tile:active{transform:scale(.96);}
+.city-tile.feat{grid-column:1/-1;aspect-ratio:16/8;}
+.ct-ph{width:100%;height:100%;display:flex;align-items:center;
+  justify-content:center;font-size:36px;}
+.ct-img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;}
+.ct-ov{position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(transparent,rgba(25,14,5,.62));padding:16px 12px 11px;}
+.ct-name{font-size:14px;font-weight:700;color:white;}
+.ct-cnt{font-size:11px;color:rgba(255,255,255,.72);margin-top:2px;}
+
+/* ── City level: magnet wall ────────────────────────────────── */
+.filter-bar{display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;flex-shrink:0;}
+.filter-bar::-webkit-scrollbar{display:none;}
+.chip{padding:7px 14px;border-radius:var(--r-def);font-size:12px;font-weight:500;
+  white-space:nowrap;cursor:pointer;border:1.5px solid var(--bdr);
+  background:var(--white);color:var(--muted);transition:all .14s;}
+.chip.on{background:var(--clay);color:white;border-color:var(--clay);}
+
+.magnet-wall{padding:0 14px 16px;columns:2;column-gap:12px;}
+.magnet-card{break-inside:avoid;margin-bottom:12px;border-radius:var(--r-md);
+  background:var(--white);box-shadow:var(--sh-mag);
+  border:2.5px solid rgba(255,255,255,.9);
+  overflow:visible;cursor:pointer;position:relative;
+  transition:transform .18s;}
+.magnet-card:active{transform:scale(.95) rotate(1deg);}
+.magnet-card::before{content:'';position:absolute;
+  top:-6px;left:50%;transform:translateX(-50%);
+  width:14px;height:14px;border-radius:50%;z-index:5;
+  background:radial-gradient(circle at 35% 35%,#e8c96d,#b8920d);
+  box-shadow:0 2px 5px rgba(0,0,0,.35),inset 0 -1px 2px rgba(0,0,0,.15);}
+.mc-inner{border-radius:14px;overflow:hidden;}
+.mc-photo{width:100%;aspect-ratio:1;background:var(--sand);
+  display:flex;align-items:center;justify-content:center;font-size:34px;}
+.mc-photo.tall{aspect-ratio:2/3;}
+.mc-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+.mc-body{padding:9px 10px 11px;background:var(--white);}
+.mc-cat{display:inline-flex;align-items:center;gap:3px;
+  font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+  padding:3px 7px;border-radius:5px;margin-bottom:5px;}
+.mc-title{font-size:12px;font-weight:700;color:var(--brown);line-height:1.3;}
+.mc-date{font-size:10px;color:var(--muted);margin-top:2px;}
+.cat-food  {background:rgba(255,126,103,.14);color:#b84030;}
+.cat-place {background:rgba(110,198,202,.14);color:#2a8a90;}
+.cat-cafe  {background:rgba(201,169,110,.14);color:#886020;}
+.cat-shop  {background:rgba(180,141,232,.14);color:#6a3ab0;}
+.cat-exp   {background:rgba(109,216,134,.14);color:#2e8048;}
+.cat-random{background:rgba(240,160,192,.14);color:#b04070;}
+
+
+/* ── FAB (persistent on MAP city level) ─────────────────────── */
+.map-fab{position:absolute;bottom:calc(96px + env(safe-area-inset-bottom));right:18px;z-index:100;
+  display:flex;flex-direction:column;align-items:center;gap:6px;}
+.map-fab-btn{width:52px;height:52px;border-radius:50%;
+  background:linear-gradient(145deg,var(--clay-l),var(--clay));
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 5px 18px rgba(192,122,79,.4);transition:transform .14s;}
+.map-fab-btn:active{transform:scale(.92);}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCREEN: CAPTURE
+═══════════════════════════════════════════════════════════════ */
+#scr-capture{position:absolute;inset:0;display:flex;flex-direction:column;
+  background:var(--dark);opacity:0;pointer-events:none;
+  transition:opacity .28s,transform .28s cubic-bezier(.4,0,.2,1);
+  transform:translateY(30px);}
+#scr-capture.open{opacity:1;pointer-events:all;transform:translateY(0);}
+
+.cap-hd{display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px 12px;flex-shrink:0;}
+.cap-title{font-size:16px;font-weight:700;color:white;}
+.cap-close{width:30px;height:30px;border-radius:50%;
+  background:rgba(255,255,255,.1);border:none;cursor:pointer;
+  color:rgba(255,255,255,.7);font-size:16px;
+  display:flex;align-items:center;justify-content:center;}
+
+.cap-types{display:flex;gap:8px;padding:0 20px 12px;flex-shrink:0;}
+.cap-type{flex:1;padding:9px;border-radius:12px;
+  border:1.5px solid rgba(255,255,255,.1);background:transparent;
+  color:rgba(255,255,255,.45);font-size:12px;font-weight:700;
+  cursor:pointer;text-align:center;transition:all .14s;}
+.cap-type.on{background:rgba(192,122,79,.2);border-color:var(--clay);color:var(--clay);}
+
+.cap-autotags{display:flex;gap:6px;padding:0 20px 10px;flex-shrink:0;flex-wrap:wrap;}
+.cap-tag{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
+  border-radius:8px;padding:4px 10px;font-size:11px;font-weight:600;
+  color:rgba(255,255,255,.5);display:flex;align-items:center;gap:4px;}
+.cap-tag.editable{border-color:rgba(192,122,79,.4);color:var(--clay-l);cursor:pointer;}
+.cap-tag.editable:active{background:rgba(192,122,79,.1);}
+
+.cap-vf{flex:1;position:relative;background:#05060d;
+  display:flex;align-items:center;justify-content:center;}
+.cap-scene{font-size:78px;opacity:.35;}
+.cap-grid-ov{position:absolute;inset:0;display:grid;
+  grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;}
+.cap-grid-ov div{border:.5px solid rgba(255,255,255,.07);}
+.cap-loc-tag{position:absolute;top:14px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.5);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,.1);border-radius:20px;
+  padding:5px 14px;font-size:11px;font-weight:600;color:white;
+  display:flex;align-items:center;gap:5px;white-space:nowrap;}
+.cap-loc-dot{width:7px;height:7px;border-radius:50%;background:#4cff91;}
+
+.cap-note-area{flex:1;padding:18px;display:none;}
+.cap-note-area.on{display:flex;flex-direction:column;}
+.cap-note-input{flex:1;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.1);border-radius:16px;
+  padding:16px;color:white;font-size:15px;line-height:1.6;
+  resize:none;outline:none;font-family:inherit;}
+.cap-note-input::placeholder{color:rgba(255,255,255,.28);}
+
+.cap-checkin-area{flex:1;padding:18px;display:none;flex-direction:column;gap:12px;}
+.cap-checkin-area.on{display:flex;}
+.cap-ci-field{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  border-radius:14px;padding:16px;color:white;font-size:15px;outline:none;
+  font-family:inherit;width:100%;}
+.cap-ci-field::placeholder{color:rgba(255,255,255,.28);}
+.cap-ci-loc-card{background:rgba(192,122,79,.1);border:1px solid rgba(192,122,79,.25);
+  border-radius:14px;padding:14px;display:flex;align-items:center;gap:10px;}
+.cap-ci-loc-dot{width:10px;height:10px;border-radius:50%;background:var(--clay);animation:gpulse 2s infinite;}
+.cap-ci-loc-text strong{display:block;font-size:14px;font-weight:700;color:white;}
+.cap-ci-loc-text span{font-size:12px;color:rgba(255,255,255,.5);}
+.cap-override{font-size:12px;color:rgba(255,255,255,.35);cursor:pointer;text-decoration:underline;}
+.cap-override:active{color:var(--clay-l);}
+
+.cap-controls{padding:16px 32px 28px;display:flex;
+  align-items:center;justify-content:space-between;flex-shrink:0;}
+.cap-side{width:44px;height:44px;border-radius:50%;
+  background:rgba(255,255,255,.1);border:none;cursor:pointer;
+  color:white;font-size:18px;display:flex;align-items:center;justify-content:center;}
+.cap-shutter{width:68px;height:68px;border-radius:50%;background:white;
+  border:4px solid rgba(255,255,255,.35);outline:3px solid rgba(255,255,255,.18);
+  cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.35);transition:transform .12s;}
+.cap-shutter:active{transform:scale(.9);}
+.cap-save-btn{flex:1;padding:16px;border-radius:14px;
+  background:linear-gradient(135deg,var(--clay-l),var(--clay));
+  border:none;font-size:15px;font-weight:800;color:white;cursor:pointer;
+  box-shadow:0 4px 18px rgba(192,122,79,.38);transition:transform .12s;}
+.cap-save-btn:active{transform:scale(.97);}
+
+/* tag sheet */
+.tag-sheet{background:var(--dark);padding:0 0 34px;flex-shrink:0;display:none;}
+.tag-sheet.open{display:block;}
+.ts-hb{padding:12px 0 10px;display:flex;justify-content:center;}
+.ts-handle{width:34px;height:4px;background:rgba(255,255,255,.16);border-radius:2px;}
+.ts-title{padding:0 20px 14px;font-size:17px;font-weight:800;color:white;}
+.cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 18px 16px;}
+.cat-opt{border-radius:13px;padding:12px 6px;display:flex;flex-direction:column;
+  align-items:center;gap:5px;cursor:pointer;
+  border:1.5px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);transition:all .14s;}
+.cat-opt.sel{border-color:var(--clay);background:rgba(192,122,79,.12);}
+.cat-opt .ci{font-size:22px;}
+.cat-opt .cl{font-size:10px;font-weight:700;color:rgba(255,255,255,.55);}
+.save-btn{margin:0 18px;width:calc(100% - 36px);padding:15px;
+  border-radius:14px;background:linear-gradient(135deg,var(--clay-l),var(--clay));
+  border:none;font-size:15px;font-weight:800;color:white;cursor:pointer;
+  box-shadow:0 4px 18px rgba(192,122,79,.38);transition:transform .12s;}
+.save-btn:active{transform:scale(.97);}
+.skip-lnk{text-align:center;padding:10px;font-size:12px;
+  color:rgba(255,255,255,.3);cursor:pointer;}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCREEN: ME
+═══════════════════════════════════════════════════════════════ */
+#scr-me{position:absolute;inset:0;display:flex;flex-direction:column;
+  background:var(--bg);opacity:0;pointer-events:none;
+  transition:opacity .28s,transform .28s cubic-bezier(.4,0,.2,1);
+  transform:translateX(24px);}
+#scr-me.open{opacity:1;pointer-events:all;transform:translateX(0);}
+
+.me-hd{padding:0 20px 20px;flex-shrink:0;}
+.me-avatar-row{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
+.me-avatar{width:60px;height:60px;border-radius:50%;
+  background:linear-gradient(135deg,var(--clay-l),var(--clay));
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:800;color:white;
+  box-shadow:0 3px 14px rgba(192,122,79,.32);}
+.me-info strong{display:block;font-size:17px;font-weight:800;color:var(--brown);}
+.me-info span{font-size:12px;color:var(--muted);}
+
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.sc{background:var(--white);border-radius:var(--r-md);padding:13px 10px;text-align:center;
+  border:1px solid var(--bdr);}
+.sc-n{font-size:22px;font-weight:700;color:var(--clay);}
+.sc-l{font-size:10px;color:var(--muted);font-weight:400;margin-top:3px;}
+
+/* Achievements */
+.ach-row{display:flex;gap:10px;padding:0 16px 4px;overflow-x:auto;}
+.ach-row::-webkit-scrollbar{display:none;}
+.ach-badge{flex-shrink:0;width:80px;display:flex;flex-direction:column;
+  align-items:center;gap:5px;}
+.ach-icon{width:56px;height:56px;border-radius:var(--r-def);
+  display:flex;align-items:center;justify-content:center;font-size:26px;
+  border:1.5px solid var(--bdr);}
+.ach-icon.earned{background:linear-gradient(135deg,#fff5e6,#fde8cc);border-color:rgba(192,122,79,.3);}
+.ach-icon.locked{background:var(--sand);filter:grayscale(1);opacity:.5;}
+.ach-name{font-size:10px;font-weight:700;color:var(--brown);text-align:center;line-height:1.3;}
+.ach-sub{font-size:9px;color:var(--muted);text-align:center;}
+
+/* Places been — horizontal scroll postcards */
+.places-scroll{display:flex;gap:12px;padding:0 16px 4px;overflow-x:auto;}
+.places-scroll::-webkit-scrollbar{display:none;}
+.place-card{flex-shrink:0;width:120px;cursor:pointer;display:flex;flex-direction:column;gap:8px;}
+.place-card:nth-child(odd)  .place-photo{transform:rotate(-1deg);}
+.place-card:nth-child(even) .place-photo{transform:rotate(0.8deg);}
+.place-card:active .place-photo{transform:scale(.95) rotate(0)!important;opacity:.8;}
+.place-photo{width:100%;aspect-ratio:3/4;border-radius:var(--r-lg);
+  background:linear-gradient(170deg,#ede6d8 0%,#e0d5c2 100%);
+  border:1.5px solid var(--bdr);position:relative;overflow:hidden;
+  box-shadow:0 4px 14px rgba(60,40,20,.13),0 1px 3px rgba(60,40,20,.08);
+  transition:transform .2s,opacity .15s;}
+.place-photo::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 55% 25%,rgba(255,255,255,.4),transparent 65%);
+  pointer-events:none;}
+.place-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+.place-photo-fb{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-size:32px;}
+.place-info{text-align:center;}
+.place-name{font-size:13px;font-weight:600;color:var(--brown);}
+.place-meta{font-size:10px;color:var(--muted);font-weight:400;font-style:italic;margin-top:2px;}
+
+/* Settings */
+.settings-list{display:flex;flex-direction:column;gap:2px;padding:0 16px;}
+.si{display:flex;align-items:center;gap:12px;padding:13px 15px;
+  background:var(--white);cursor:pointer;transition:background .14s;}
+.si:first-child{border-radius:var(--r-md) var(--r-md) 0 0;}
+.si:last-child{border-radius:0 0 var(--r-md) var(--r-md);}
+.si:not(:last-child){border-bottom:1px solid var(--bdr);}
+.si:active{background:var(--bg);}
+.si-icon{width:32px;height:32px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.si-txt{flex:1;}
+.si-txt strong{display:block;font-size:13px;font-weight:600;color:var(--brown);}
+.si-txt span{font-size:11px;color:var(--muted);}
+.si-arrow{color:var(--muted);font-size:16px;}
+.toggle{width:42px;height:24px;border-radius:12px;background:var(--clay);
+  position:relative;cursor:pointer;flex-shrink:0;}
+.toggle::after{content:'';width:18px;height:18px;border-radius:50%;background:white;
+  position:absolute;top:3px;right:3px;transition:transform .18s;}
+.toggle.off{background:var(--sand);}
+.toggle.off::after{transform:translateX(-18px);}
+
+/* ── Captured overlay ─────────────────────────────────────── */
+.cap-overlay{position:fixed;inset:0;z-index:900;
+  background:rgba(30,18,8,.6);display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .28s;}
+.cap-overlay.show{opacity:1;pointer-events:all;}
+.cap-success{background:var(--white);border-radius:22px;padding:26px 22px;
+  width:270px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);
+  transform:scale(.88);transition:transform .28s cubic-bezier(.34,1.56,.64,1);}
+.cap-overlay.show .cap-success{transform:scale(1);}
+.cs-emoji{font-size:48px;margin-bottom:8px;}
+.cs-title{font-size:18px;font-weight:800;color:var(--brown);}
+.cs-sub{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.5;}
+.cs-magnet{background:var(--bg);border-radius:14px;padding:12px;
+  margin:14px 0;border:1.5px solid var(--bdr);position:relative;text-align:left;}
+.cs-magnet::before{content:'';position:absolute;top:-7px;left:50%;
+  transform:translateX(-50%);width:14px;height:14px;border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,#e8c96d,#b8920d);
+  box-shadow:0 2px 5px rgba(0,0,0,.28);}
+.cs-m-ph{width:100%;height:68px;border-radius:9px;
+  background:linear-gradient(135deg,#a18cd1,#fbc2eb);
+  display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:8px;}
+.cs-m-loc{font-size:12px;font-weight:700;color:var(--brown);}
+.cs-m-date{font-size:10px;color:var(--muted);margin-top:2px;}
+.cs-close{margin-top:4px;width:100%;padding:14px;border-radius:11px;
+  background:var(--brown);color:white;border:none;
+  font-size:14px;font-weight:700;cursor:pointer;}
+
+/* ═══════════════════════════════════════════════════════════════
+   INTERACTIVE WORLD MAP
+═══════════════════════════════════════════════════════════════ */
+/* Map mode: #map-content becomes a clipping viewport */
+#map-content.map-mode{overflow:hidden!important;padding-bottom:0!important;position:relative;}
+
+#view-world{position:absolute;inset:0;overflow:hidden;}
+
+/* ── MapLibre overrides ─────────────────────────────────────── */
+.maplibregl-ctrl-attrib,.maplibregl-ctrl-logo{display:none!important;}
+.maplibregl-marker{z-index:10;}
+
+/* Country / city markers — positioned by MapLibre, not manually */
+.map-pin{cursor:pointer;z-index:10;display:flex;flex-direction:column;align-items:center;gap:3px;}
+.map-pin-bubble{width:38px;height:38px;border-radius:50%;
+  background:var(--white);border:2.5px solid var(--clay);
+  display:flex;align-items:center;justify-content:center;font-size:17px;
+  box-shadow:0 3px 14px rgba(60,40,20,.28);transition:transform .15s;}
+.map-pin:active .map-pin-bubble{transform:scale(.88);}
+.map-pin-tail{width:2px;height:8px;background:var(--clay);border-radius:1px;}
+.map-pin-lbl{background:rgba(30,18,8,.72);backdrop-filter:blur(8px);
+  border-radius:var(--r-sm);padding:3px 8px;font-size:10px;font-weight:600;
+  color:white;white-space:nowrap;margin-top:2px;}
+.map-pin-lbl span{opacity:.65;font-weight:400;}
+
+/* Zoom-driven pin visibility */
+.country-pin{transition:opacity .35s,transform .35s;}
+.country-pin.pin-hide{opacity:0!important;pointer-events:none!important;transform:scale(.6);}
+.city-pin{opacity:0;pointer-events:none;transform:scale(.6);transition:opacity .35s,transform .35s;}
+.city-pin.pin-show{opacity:1;pointer-events:auto;transform:scale(1);}
+/* City pins: slightly smaller than country pins */
+.city-pin .map-pin-bubble{width:30px;height:30px;font-size:13px;border-width:2px;}
+.city-pin .map-pin-lbl{font-size:9px;padding:2px 7px;}
+
+/* My location beacon */
+.my-loc{position:absolute;transform:translate(-50%,-50%);z-index:15;pointer-events:none;}
+.my-loc-ring{width:22px;height:22px;border-radius:50%;
+  background:rgba(192,122,79,.18);display:flex;align-items:center;
+  justify-content:center;animation:locring 2.4s infinite;}
+@keyframes locring{0%,100%{box-shadow:0 0 0 0 rgba(192,122,79,.4);}
+  55%{box-shadow:0 0 0 12px rgba(192,122,79,0);}}
+.my-loc-dot{width:10px;height:10px;border-radius:50%;
+  background:var(--clay);border:2px solid white;
+  box-shadow:0 2px 8px rgba(192,122,79,.55);}
+
+/* Map overlays */
+.map-top-ov{position:absolute;top:12px;left:14px;right:14px;z-index:20;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;pointer-events:none;}
+.map-stat-chip{background:rgba(250,247,242,.88);backdrop-filter:blur(14px);
+  border:1px solid rgba(160,130,90,.14);border-radius:var(--r-def);
+  padding:6px 12px;font-size:12px;color:var(--brown);
+  box-shadow:0 2px 10px rgba(60,40,20,.1);pointer-events:auto;}
+.map-stat-chip strong{font-weight:700;color:var(--clay);}
+
+.map-bot-ov{position:absolute;bottom:calc(96px + env(safe-area-inset-bottom));left:14px;right:14px;z-index:20;}
+
+/* Geo prompt inside map: override positioning */
+#view-world .geo-prompt{margin:0;
+  background:rgba(250,247,242,.92);backdrop-filter:blur(14px);
+  box-shadow:0 4px 20px rgba(60,40,20,.14);}
+
+/* Zoom controls */
+.zoom-ctrls{position:absolute;right:14px;bottom:calc(210px + env(safe-area-inset-bottom));z-index:20;
+  display:flex;flex-direction:column;gap:6px;}
+.zoom-btn{width:38px;height:38px;border-radius:var(--r-sm);
+  background:rgba(250,247,242,.92);backdrop-filter:blur(14px);
+  border:1px solid rgba(160,130,90,.14);
+  box-shadow:0 2px 8px rgba(60,40,20,.1);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:20px;font-weight:300;color:var(--brown);
+  line-height:1;transition:background .14s;user-select:none;}
+.zoom-btn:active{background:var(--sand);}
+
+/* ── Memory detail sheet ─────────────────────────────────────── */
+.detail-backdrop{position:absolute;inset:0;background:rgba(30,18,8,.45);
+  z-index:150;opacity:0;pointer-events:none;transition:opacity .28s;}
+.detail-backdrop.open{opacity:1;pointer-events:all;}
+.detail-sheet-wrap{position:absolute;bottom:0;left:0;right:0;z-index:160;
+  transform:translateY(100%);transition:transform .32s cubic-bezier(.4,0,.2,1);}
+.detail-sheet-wrap.open{transform:translateY(0);}
+.detail-photo-strip{height:220px;background:var(--sand);
+  display:flex;align-items:center;justify-content:center;font-size:70px;
+  border-radius:24px 24px 0 0;overflow:hidden;position:relative;}
+.detail-photo-strip img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.detail-sheet{background:var(--white);padding:18px 20px 48px;}
+.detail-handle{width:34px;height:4px;background:var(--sand);border-radius:2px;
+  margin:0 auto 16px;}
+.detail-cat-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.d-cat{display:inline-flex;align-items:center;gap:4px;
+  font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+  padding:4px 10px;border-radius:6px;}
+.d-date{font-size:12px;color:var(--muted);}
+.d-title{font-size:20px;font-weight:800;color:var(--brown);letter-spacing:-.3px;line-height:1.25;}
+.d-loc{font-size:12px;color:var(--muted);margin:6px 0 12px;
+  display:flex;align-items:center;gap:4px;}
+.d-note{background:var(--bg);border-radius:12px;padding:13px;
+  font-size:13px;color:#6a5040;line-height:1.65;border-left:3px solid var(--clay);}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════════════════════════════════════════════════════
+     MAP SCREEN (root)
+══════════════════════════════════════════════════════════════ -->
+<div id="scr-map">
+  <div class="sb" style="color:var(--brown);">
+    <span class="sb-time">9:41</span>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <svg width="16" height="11" viewBox="0 0 16 11" fill="none"><rect x="9" y="0" width="3" height="11" rx="1" fill="#3d2c1e"/><rect x="13.5" y="0" width="2.5" height="11" rx="1" fill="#3d2c1e"/><rect x="4.5" y="2" width="3" height="9" rx="1" fill="#3d2c1e" opacity=".6"/><rect x="0" y="4" width="3" height="7" rx="1" fill="#3d2c1e" opacity=".4"/></svg>
+      <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x="0" y="1" width="21" height="9" rx="2.5" stroke="#3d2c1e" stroke-width="1.2" fill="none" opacity=".5"/><rect x="1.5" y="2.5" width="14" height="6" rx="1.5" fill="#3d2c1e"/></svg>
+    </div>
+  </div>
+
+  <!-- Top bar -->
+  <div class="map-topbar">
+    <!-- back btn (hidden at world level) -->
+    <button class="bc-back" id="bc-back" style="display:none;" onclick="mapBack()">
+      <svg width="10" height="15" viewBox="0 0 10 15" fill="none"><path d="M9 1L1 7.5L9 14" stroke="var(--brown)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <!-- Logo / breadcrumb -->
+    <div class="breadcrumb" id="breadcrumb">
+      <span class="map-logo">Travel Magnet</span>
+    </div>
+  </div>
+
+  <!-- Country pills removed -->
+  <div id="cty-pills" style="display:none;"></div>
+
+  <!-- Filter chips (city level) -->
+  <div class="filter-bar" id="city-filter-bar" style="display:none;">
+    <div class="chip on" onclick="filterCat(this,'all')">All</div>
+    <div class="chip" onclick="filterCat(this,'food')">🍜 Food</div>
+    <div class="chip" onclick="filterCat(this,'place')">🗺 Place</div>
+    <div class="chip" onclick="filterCat(this,'cafe')">☕ Café</div>
+    <div class="chip" onclick="filterCat(this,'shop')">🛍 Shopping</div>
+    <div class="chip" onclick="filterCat(this,'exp')">✨ Experience</div>
+    <div class="chip" onclick="filterCat(this,'random')">🎲 Random</div>
+  </div>
+
+  <!-- Main content area -->
+  <div class="scroll" id="map-content" style="padding-bottom:calc(100px + env(safe-area-inset-bottom));">
+
+    <!-- ── WORLD: interactive map ───────────────────────── -->
+    <div id="view-world">
+
+      <!-- MapLibre GL JS map — pins & layers injected by JS -->
+      <div id="map-el" style="position:absolute;inset:0;"></div>
+
+      <!-- Stats chip (top-left overlay) -->
+      <div class="map-top-ov" id="world-stats">
+        <div class="map-stat-chip">
+          <strong>4</strong> countries &nbsp;·&nbsp; <strong>8</strong> cities &nbsp;·&nbsp; <strong>27</strong> moments
+        </div>
+      </div>
+
+      <!-- Geo prompt (bottom overlay) -->
+      <div class="map-bot-ov">
+        <div class="geo-prompt" id="geo-prompt">
+          <div class="geo-dot-wrap"><div class="geo-dot"></div></div>
+          <div class="geo-txt">
+            <strong>Kyoto, Japan</strong>
+            <span>Good time to save a moment</span>
+          </div>
+          <button class="geo-cta" onclick="openCapture()">Capture</button>
+        </div>
+      </div>
+
+      <!-- Zoom controls -->
+      <div class="zoom-ctrls">
+        <div class="zoom-btn" onclick="mapZoom(0.4)">+</div>
+        <div class="zoom-btn" onclick="mapZoom(-0.4)">−</div>
+      </div>
+
+    </div><!-- /view-world -->
+
+    <!-- country: city grid -->
+    <div id="view-country" style="display:none;">
+      <div class="city-grid" id="city-grid"></div>
+    </div>
+
+    <!-- city: magnet wall -->
+    <div id="view-city" style="display:none;">
+      <div class="magnet-wall" id="magnet-wall"></div>
+    </div>
+
+  </div>
+
+  <!-- City-level FAB -->
+  <div class="map-fab" id="city-fab" style="display:none;">
+    <button class="map-fab-btn" onclick="openCapture()">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><path d="M11 4V18M4 11H18"/></svg>
+    </button>
+  </div>
+
+  <!-- Bottom nav -->
+  <div class="bnav">
+    <div class="bnav-tab on" id="tab-map" onclick="switchTab('map')">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--clay)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l6-2 8 4 6-3v14l-6 3-8-4-6 2V5Z"/><path d="M7 3v14M15 7v14"/></svg>
+      <span class="bnav-lbl" style="color:var(--clay);">Map</span>
+    </div>
+    <button class="bnav-fab" onclick="openCapture()">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3" fill="white" stroke="none"/><path d="M16 4H8L6.5 7H5a1 1 0 00-1 1"/></svg>
+    </button>
+    <div class="bnav-tab" id="tab-me" onclick="switchTab('me')">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="7" r="3.5"/><path d="M3 19c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span class="bnav-lbl">Me</span>
+    </div>
+  </div>
+
+  <!-- Memory detail sheet (overlay inside MAP) -->
+  <div class="detail-backdrop" id="detail-backdrop" onclick="closeDetail()"></div>
+  <div class="detail-sheet-wrap" id="detail-sheet-wrap">
+    <div class="detail-photo-strip" id="detail-photo-strip"><span id="detail-emoji">🍜</span></div>
+    <div class="detail-sheet">
+      <div class="detail-handle"></div>
+      <div class="detail-cat-row">
+        <span class="d-cat" id="d-cat">🍜 Food</span>
+        <span class="d-date" id="d-date">May 3, 2026</span>
+      </div>
+      <div class="d-title" id="d-title">Ichiran Ramen</div>
+      <div class="d-loc">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1C4.3 1 3 2.3 3 4C3 6.5 6 11 6 11C6 11 9 6.5 9 4C9 2.3 7.7 1 6 1ZM6 5.2C5.3 5.2 4.8 4.7 4.8 4C4.8 3.3 5.3 2.8 6 2.8C6.7 2.8 7.2 3.3 7.2 4C7.2 4.7 6.7 5.2 6 5.2Z" fill="var(--muted)"/></svg>
+        <span id="d-loc">Shinjuku, Tokyo · Japan</span>
+      </div>
+      <div class="d-note" id="d-note">Solo booth, red curtain, just me and the broth. The egg was perfect.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     CAPTURE SCREEN
+══════════════════════════════════════════════════════════════ -->
+<div id="scr-capture">
+  <div class="sb" style="color:rgba(255,255,255,.55);padding-top:0;">
+    <span class="sb-time" style="color:rgba(255,255,255,.6);">9:41</span>
+  </div>
+  <div class="cap-hd">
+    <div class="cap-title" style="font-weight:500;letter-spacing:-.2px;">capture</div>
+    <button class="cap-close" onclick="closeCapture()">✕</button>
+  </div>
+
+  <!-- Type tabs -->
+  <div class="cap-types">
+    <div class="cap-type on" data-t="photo" onclick="setCapType(this,'photo')">📷 Photo</div>
+    <div class="cap-type" data-t="note"  onclick="setCapType(this,'note')">📝 Note</div>
+    <div class="cap-type" data-t="ci"    onclick="setCapType(this,'ci')">📍 Check-in</div>
+  </div>
+
+  <!-- Auto-tags -->
+  <div class="cap-autotags">
+    <div class="cap-tag"><span>📍</span>Kyoto, Japan</div>
+    <div class="cap-tag"><span>🌏</span>Japan</div>
+    <div class="cap-tag"><span>🕐</span>Now</div>
+    <div class="cap-tag editable" onclick="toast('Override location','✏️')"><span>✏️</span>Override</div>
+  </div>
+
+  <!-- Camera view -->
+  <div class="cap-vf" id="cap-vf">
+    <div class="cap-scene" id="cap-scene">🏯</div>
+    <div class="cap-grid-ov">
+      <div></div><div></div><div></div>
+      <div></div><div></div><div></div>
+      <div></div><div></div><div></div>
+    </div>
+    <div class="cap-loc-tag"><div class="cap-loc-dot"></div>Kyoto, Japan</div>
+  </div>
+
+  <!-- Note view -->
+  <div class="cap-note-area" id="cap-note-area">
+    <textarea class="cap-note-input" placeholder="What's on your mind about this place…"></textarea>
+  </div>
+
+  <!-- Check-in view -->
+  <div class="cap-checkin-area" id="cap-ci-area">
+    <div class="cap-ci-loc-card">
+      <div class="cap-ci-loc-dot"></div>
+      <div class="cap-ci-loc-text">
+        <strong>Kyoto, Japan</strong>
+        <span>Looks about right</span>
+      </div>
+    </div>
+    <input class="cap-ci-field" type="text" placeholder="Place name (e.g. Fushimi Inari)">
+    <span class="cap-override" onclick="toast('Location override','✏️')">Wrong location? Override manually →</span>
+  </div>
+
+  <!-- Category tag sheet -->
+  <div class="tag-sheet" id="tag-sheet">
+    <div class="ts-hb"><div class="ts-handle"></div></div>
+    <div class="ts-title">What kind of memory?</div>
+    <div class="cat-grid">
+      <div class="cat-opt" onclick="selCat(this)"><span class="ci">🍜</span><span class="cl">Food</span></div>
+      <div class="cat-opt" onclick="selCat(this)"><span class="ci">🗺</span><span class="cl">Place</span></div>
+      <div class="cat-opt" onclick="selCat(this)"><span class="ci">☕</span><span class="cl">Café</span></div>
+      <div class="cat-opt" onclick="selCat(this)"><span class="ci">🛍</span><span class="cl">Shopping</span></div>
+      <div class="cat-opt" onclick="selCat(this)"><span class="ci">✨</span><span class="cl">Experience</span></div>
+      <div class="cat-opt" onclick="selCat(this)"><span class="ci">🎲</span><span class="cl">Random</span></div>
+    </div>
+    <button class="save-btn" onclick="saveMem()">Pin this moment</button>
+    <div class="skip-lnk" onclick="saveMem()">Skip for now</div>
+  </div>
+
+  <!-- Camera controls -->
+  <div class="cap-controls" id="cap-controls">
+    <button class="cap-side" onclick="rotateCam()">🔄</button>
+    <button class="cap-shutter" id="cap-shutter" onclick="takePhoto()"></button>
+    <button class="cap-side" onclick="toast('Gallery','🖼')">🖼</button>
+  </div>
+
+  <!-- Note / Check-in save bar -->
+  <div style="padding:0 20px 36px;display:none;" id="cap-save-bar">
+    <button class="cap-save-btn" onclick="saveMem()">Save Moment</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ME SCREEN
+══════════════════════════════════════════════════════════════ -->
+<div id="scr-me">
+  <div class="sb" style="color:var(--brown);"><span class="sb-time">9:41</span></div>
+
+  <div class="scroll" style="padding-bottom:calc(100px + env(safe-area-inset-bottom));">
+    <div class="me-hd">
+      <div class="me-avatar-row">
+        <div class="me-avatar">M</div>
+        <div class="me-info">
+          <strong>Libra-Mars</strong>
+          <span>Collecting moments since 2025</span>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="sc"><div class="sc-n">4</div><div class="sc-l">Countries</div></div>
+        <div class="sc"><div class="sc-n">8</div><div class="sc-l">Cities</div></div>
+        <div class="sc"><div class="sc-n">27</div><div class="sc-l">Moments</div></div>
+      </div>
+    </div>
+
+    <div class="sec">Achievements</div>
+    <div class="ach-row" style="margin-bottom:20px;">
+      <div class="ach-badge">
+        <div class="ach-icon earned">✈️</div>
+        <div class="ach-name">First Flight</div>
+        <div class="ach-sub">1st country</div>
+      </div>
+      <div class="ach-badge">
+        <div class="ach-icon earned">🗺</div>
+        <div class="ach-name">Explorer</div>
+        <div class="ach-sub">3 countries</div>
+      </div>
+      <div class="ach-badge">
+        <div class="ach-icon earned">📸</div>
+        <div class="ach-name">Snapshot</div>
+        <div class="ach-sub">10 moments</div>
+      </div>
+      <div class="ach-badge">
+        <div class="ach-icon locked">🌍</div>
+        <div class="ach-name">Globetrotter</div>
+        <div class="ach-sub">5 countries</div>
+      </div>
+      <div class="ach-badge">
+        <div class="ach-icon locked">🏙</div>
+        <div class="ach-name">City Collector</div>
+        <div class="ach-sub">10 cities</div>
+      </div>
+    </div>
+
+    <div class="sec">Places I've been</div>
+    <div class="places-scroll" style="margin-bottom:24px;">
+
+      <div class="place-card" onclick="switchTab('map');zoomToCountry('japan')">
+        <div class="place-photo">
+          <img src="https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400&q=80&fit=crop&auto=format"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="place-photo-fb" style="display:none;">🏯</div>
+        </div>
+        <div class="place-info">
+          <div class="place-name">Japan</div>
+          <div class="place-meta">4 cities · 12 moments</div>
+        </div>
+      </div>
+
+      <div class="place-card" onclick="switchTab('map');zoomToCountry('france')">
+        <div class="place-photo">
+          <img src="https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400&q=80&fit=crop&auto=format"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="place-photo-fb" style="display:none;">🗼</div>
+        </div>
+        <div class="place-info">
+          <div class="place-name">France</div>
+          <div class="place-meta">2 cities · 7 moments</div>
+        </div>
+      </div>
+
+      <div class="place-card" onclick="switchTab('map');zoomToCountry('italy')">
+        <div class="place-photo">
+          <img src="https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&q=80&fit=crop&auto=format"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="place-photo-fb" style="display:none;">🏛</div>
+        </div>
+        <div class="place-info">
+          <div class="place-name">Italy</div>
+          <div class="place-meta">1 city · 5 moments</div>
+        </div>
+      </div>
+
+      <div class="place-card" onclick="switchTab('map');zoomToCountry('australia')">
+        <div class="place-photo">
+          <img src="https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=400&q=80&fit=crop&auto=format"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="place-photo-fb" style="display:none;">🦘</div>
+        </div>
+        <div class="place-info">
+          <div class="place-name">Australia</div>
+          <div class="place-meta">1 city · 3 moments</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="sec">Settings</div>
+    <div class="settings-list">
+      <div class="si">
+        <div class="si-icon" style="background:rgba(76,200,145,.1);">📍</div>
+        <div class="si-txt"><strong>Location Permission</strong><span>Always on</span></div>
+        <div class="toggle"></div>
+      </div>
+      <div class="si">
+        <div class="si-icon" style="background:rgba(192,122,79,.1);">🌐</div>
+        <div class="si-txt"><strong>Auto-Detection</strong><span>New countries & cities</span></div>
+        <div class="toggle"></div>
+      </div>
+      <div class="si">
+        <div class="si-icon" style="background:rgba(100,130,200,.1);">🔒</div>
+        <div class="si-txt"><strong>Privacy Controls</strong><span>Moments are private</span></div>
+        <span class="si-arrow">›</span>
+      </div>
+      <div class="si">
+        <div class="si-icon" style="background:rgba(120,100,200,.1);">📦</div>
+        <div class="si-txt"><strong>Export Data</strong><span>Download your memories</span></div>
+        <span class="si-arrow">›</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom nav (mirrored) -->
+  <div class="bnav">
+    <div class="bnav-tab" id="tab-map-me" onclick="switchTab('map')">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l6-2 8 4 6-3v14l-6 3-8-4-6 2V5Z"/><path d="M7 3v14M15 7v14"/></svg>
+      <span class="bnav-lbl">Map</span>
+    </div>
+    <button class="bnav-fab" onclick="openCapture()">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3" fill="white" stroke="none"/><path d="M16 4H8L6.5 7H5a1 1 0 00-1 1"/></svg>
+    </button>
+    <div class="bnav-tab on" id="tab-me2">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--clay)" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="7" r="3.5"/><path d="M3 19c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span class="bnav-lbl" style="color:var(--clay);">Me</span>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-el" id="toast-el"></div>
+
+<!-- Saved overlay -->
+<div class="cap-overlay" id="cap-overlay" onclick="closeSaved()">
+  <div class="cap-success" onclick="event.stopPropagation()">
+    <div class="cs-emoji">📸</div>
+    <div class="cs-title">Memory Saved!</div>
+    <div class="cs-sub">Added to your Kyoto magnet wall.</div>
+    <div class="cs-magnet">
+      <div class="cs-m-ph">🏯</div>
+      <div class="cs-m-loc">Kyoto · Japan</div>
+      <div class="cs-m-date">May 15, 2026 · 9:41 AM</div>
+    </div>
+    <button class="cs-close" onclick="closeSaved()">Back to Map</button>
+  </div>
+</div>
+
+<script>
+/* ── Data ──────────────────────────────────────────────────── */
+const COUNTRIES = {
+  japan: { name:'Japan',  memories:12, cities:4, days:8,
+    cityList:[
+      {id:'tokyo', name:'Tokyo', count:8, feat:true,
+       photo:'https://images.unsplash.com/photo-qAwkxkU1Xso?w=700&q=80&fit=crop&auto=format'},
+      {id:'kyoto', name:'Kyoto', count:5,
+       photo:'https://images.unsplash.com/photo-x7Vl0wVpZBo?w=500&q=80&fit=crop&auto=format'},
+      {id:'osaka', name:'Osaka', count:4,
+       photo:'https://images.unsplash.com/photo-wZLX8vQqa08?w=500&q=80&fit=crop&auto=format'},
+      {id:'nara',  name:'Nara',  count:2,
+       photo:'https://images.unsplash.com/photo-tEOhkLuqmUI?w=500&q=80&fit=crop&auto=format'},
+    ]},
+  france:{ name:'France', memories:7,  cities:2, days:5,
+    cityList:[
+      {id:'paris', name:'Paris', count:5, feat:true,
+       photo:'https://images.unsplash.com/photo-Q0-fOL2nqZc?w=700&q=80&fit=crop&auto=format'},
+      {id:'nice',  name:'Nice',  count:2,
+       photo:'https://images.unsplash.com/photo-IocJwyqRv3M?w=500&q=80&fit=crop&auto=format'},
+    ]},
+  italy: { name:'Italy',  memories:5,  cities:2, days:4,
+    cityList:[
+      {id:'rome',   name:'Rome',   count:3, feat:true,
+       photo:'https://images.unsplash.com/photo-upGZ5p92SHU?w=700&q=80&fit=crop&auto=format'},
+      {id:'venice', name:'Venice', count:2,
+       photo:'https://images.unsplash.com/photo-oWy1jKPbAVw?w=500&q=80&fit=crop&auto=format'},
+    ]},
+  australia:{ name:'Australia', memories:3, cities:1, days:3,
+    cityList:[
+      {id:'sydney', name:'Sydney', count:3, feat:true,
+       photo:'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=700&q=80&fit=crop&auto=format'},
+    ]},
+};
+
+const EMOJIS = {tokyo:'🗼',kyoto:'🏯',osaka:'🏙',nara:'🦌',paris:'🗼',nice:'🌊',rome:'🏛',venice:'🚤',sydney:'🦘'};
+
+const MEMS = {
+  tokyo:[
+    {id:1,emoji:'🍜',cat:'food',  loc:'Shinjuku', date:'May 3',  title:'Ichiran Ramen',         note:'Solo booth, red curtain, just me and the broth.',tall:false, photo:'https://images.unsplash.com/photo-TWTxHN2QIGc?w=400&q=80&fit=crop&auto=format'},
+    {id:2,emoji:'🗼',cat:'place', loc:'Odaiba',   date:'May 4',  title:'Tokyo Tower at dusk',   note:'The whole city went golden.',tall:true,  photo:'https://images.unsplash.com/photo-t1JoTScJs-c?w=400&q=80&fit=crop&auto=format'},
+    {id:3,emoji:'☕',cat:'cafe',  loc:'Shimokitazawa',date:'May 5',title:'Jazz café find',      note:'Vinyl records, no Wi-Fi, 3 hours.',tall:false,photo:'https://images.unsplash.com/photo-8sOZJ8JF0S8?w=400&q=80&fit=crop&auto=format'},
+    {id:4,emoji:'🛍',cat:'shop',  loc:'Harajuku', date:'May 5',  title:'Takeshita Street haul', note:'Vintage Issey Miyake for ¥800.',tall:false,photo:''},
+    {id:5,emoji:'✨',cat:'exp',   loc:'Asakusa',  date:'May 6',  title:'Senso-ji dawn visit',   note:'Only me and the monks.',tall:true, photo:'https://images.unsplash.com/photo-fEZibgjpzd4?w=400&q=80&fit=crop&auto=format'},
+    {id:6,emoji:'🍣',cat:'food',  loc:'Tsukiji',  date:'May 7',  title:'Market breakfast sushi',note:'6am, counter seat, sea urchin.',tall:false,photo:'https://images.unsplash.com/photo-l3Mr7vSdmd4?w=400&q=80&fit=crop&auto=format'},
+    {id:7,emoji:'🎲',cat:'random',loc:'Akihabara',date:'May 7',  title:'Arcade at midnight',    note:'Beat a local at taiko drums.',tall:false,photo:''},
+    {id:8,emoji:'🌸',cat:'place', loc:'Ueno Park',date:'May 8',  title:'Last cherry blossoms',  note:'Just barely in season.',tall:true, photo:'https://images.unsplash.com/photo-14cHwhRKJh8?w=400&q=80&fit=crop&auto=format'},
+  ]
+};
+
+const GRAD = {food:'#ff9a9e,#fecfef',place:'#a1c4fd,#c2e9fb',cafe:'#ffecd2,#fcb69f',shop:'#d9a7c7,#fffcdc',exp:'#d4fc79,#96e6a1',random:'#f093fb,#f5576c'};
+const CAT  = {food:{l:'Food',c:'cat-food',i:'🍜'},place:{l:'Place',c:'cat-place',i:'🗺'},cafe:{l:'Café',c:'cat-cafe',i:'☕'},shop:{l:'Shopping',c:'cat-shop',i:'🛍'},exp:{l:'Experience',c:'cat-exp',i:'✨'},random:{l:'Random',c:'cat-random',i:'🎲'}};
+
+/* ── Map state ─────────────────────────────────────────────── */
+let mapLevel   = 'world';   // 'world' | 'country' | 'city'
+let curCountry = null;
+let curCity    = null;
+let curFilter  = 'all';
+
+/* ── Tab switching ─────────────────────────────────────────── */
+function switchTab(tab) {
+  if (tab === 'map') {
+    document.getElementById('scr-me').classList.remove('open');
+    document.getElementById('tab-map').classList.add('on');
+    document.getElementById('tab-me').classList.remove('on');
+    document.getElementById('tab-me').querySelector('.bnav-lbl').style.color = '';
+    document.getElementById('tab-map').querySelector('.bnav-lbl').style.color = 'var(--clay)';
+    document.getElementById('tab-map').querySelector('svg').setAttribute('stroke','var(--clay)');
+    document.getElementById('tab-me').querySelector('svg').setAttribute('stroke','var(--muted)');
+  } else {
+    document.getElementById('scr-me').classList.add('open');
+    document.getElementById('tab-map').classList.remove('on');
+    document.getElementById('tab-me').classList.add('on');
+    document.getElementById('tab-me').querySelector('.bnav-lbl').style.color = 'var(--clay)';
+    document.getElementById('tab-map').querySelector('.bnav-lbl').style.color = '';
+    document.getElementById('tab-map').querySelector('svg').setAttribute('stroke','var(--muted)');
+    document.getElementById('tab-me').querySelector('svg').setAttribute('stroke','var(--clay)');
+  }
+}
+
+/* ── Map zoom ──────────────────────────────────────────────── */
+function setMapLevel(level) {
+  mapLevel = level;
+  const mc = document.getElementById('map-content');
+  const isMapWorld = level === 'world';
+
+  // Map-mode: clip the content area so the interactive map fills it
+  if (isMapWorld) {
+    mc.classList.add('map-mode');
+    // Re-sync pin visibility whenever we return to the world map
+    requestAnimationFrame(() => { if (window._syncMapPins) window._syncMapPins(); });
+  } else {
+    mc.classList.remove('map-mode');
+    mc.style.paddingBottom = 'calc(100px + env(safe-area-inset-bottom))';
+  }
+
+  // show/hide views
+  document.getElementById('view-world').style.display   = level==='world'   ? '' : 'none';
+  document.getElementById('view-country').style.display = level==='country' ? '' : 'none';
+  document.getElementById('view-city').style.display    = level==='city'    ? '' : 'none';
+
+  // back btn
+  document.getElementById('bc-back').style.display = level==='world' ? 'none' : '';
+  // pills / filter
+  document.getElementById('cty-pills').style.display       = level==='country' ? '' : 'none';
+  document.getElementById('city-filter-bar').style.display = level==='city'    ? '' : 'none';
+  // city FAB
+  document.getElementById('city-fab').style.display = level==='city' ? '' : 'none';
+  // stats + geo overlay (inside map)
+  const ws = document.getElementById('world-stats');
+  if (ws) ws.style.display = isMapWorld ? '' : 'none';
+  // scroll to top (for non-map views)
+  if (!isMapWorld) mc.scrollTop = 0;
+}
+
+function setBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  if (mapLevel === 'world') {
+    bc.innerHTML = `<span class="map-logo">Travel Magnet</span>`;
+  } else if (mapLevel === 'country') {
+    bc.innerHTML = `<span class="bc-item" onclick="drillWorld()">World</span><span class="bc-sep"> › </span><span class="bc-item" style="color:var(--brown);cursor:default;">${COUNTRIES[curCountry].name}</span>`;
+  } else {
+    const cName = COUNTRIES[curCountry].cityList.find(c=>c.id===curCity)?.name || '';
+    bc.innerHTML = `<span class="bc-item" onclick="drillWorld()">World</span><span class="bc-sep"> › </span><span class="bc-item" onclick="drillCountry(curCountry)">${COUNTRIES[curCountry].name}</span><span class="bc-sep"> › </span><span class="bc-item" style="color:var(--brown);cursor:default;">${cName}</span>`;
+  }
+}
+
+/* ── Drill down ────────────────────────────────────────────── */
+function drillWorld() {
+  curCountry = null; curCity = null;
+  // setMapLevel first — updates mapLevel before setBreadcrumb reads it
+  setMapLevel('world'); setBreadcrumb();
+}
+
+function drillCountry(key) {
+  curCountry = key;
+  const d = COUNTRIES[key];
+  if (!d) return;
+  // render cities
+  document.getElementById('city-grid').innerHTML = d.cityList.map(c => `
+    <div class="city-tile${c.feat?' feat':''}" onclick="drillCity('${c.id}')">
+      <img class="ct-img" src="${c.photo}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">
+      <div class="ct-ph" style="display:none">${EMOJIS[c.id]||'🌍'}</div>
+      <div class="ct-ov">
+        <div class="ct-name">${c.name}</div>
+        <div class="ct-cnt">${c.count} memories</div>
+      </div>
+    </div>`).join('');
+  // setMapLevel first — updates mapLevel before setBreadcrumb reads it
+  setMapLevel('country'); setBreadcrumb();
+}
+
+function drillCity(cityId) {
+  curCity = cityId;
+  curFilter = 'all';
+  document.querySelectorAll('#city-filter-bar .chip').forEach(c=>c.classList.remove('on'));
+  const firstChip = document.querySelector('#city-filter-bar .chip');
+  if (firstChip) firstChip.classList.add('on');
+  if (!curCountry) return;
+  renderMagnets(MEMS[cityId] || genMock(COUNTRIES[curCountry].cityList.find(c=>c.id===cityId)));
+  // setMapLevel first — updates mapLevel before setBreadcrumb reads it
+  setMapLevel('city'); setBreadcrumb();
+}
+
+function mapBack() {
+  if (mapLevel === 'city')    { curCity = null;    setMapLevel('country'); setBreadcrumb(); }
+  else if (mapLevel === 'country') { curCountry = null; setMapLevel('world');   setBreadcrumb(); }
+}
+
+
+/* ── Magnet wall ───────────────────────────────────────────── */
+function renderMagnets(mems) {
+  const list = curFilter==='all' ? mems : mems.filter(m=>m.cat===curFilter);
+  document.getElementById('magnet-wall').innerHTML = list.map(mem => {
+    const cat = CAT[mem.cat];
+    const img = mem.photo
+      ? `<img src="${mem.photo}" alt="" loading="lazy"
+             style="width:100%;aspect-ratio:${mem.tall?'2/3':'1'};object-fit:cover;display:block;"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      : '';
+    const fallback = `<div class="mc-photo${mem.tall?' tall':''}"
+      style="background:linear-gradient(135deg,${GRAD[mem.cat]});${mem.photo?'display:none':''}">
+      ${mem.emoji}</div>`;
+    return `
+    <div class="magnet-card" onclick='showDetail(${JSON.stringify(mem).replace(/'/g,"&#39;")})'>
+      <div class="mc-inner">
+        ${img}${fallback}
+        <div class="mc-body">
+          <div class="mc-cat ${cat.c}">${cat.i} ${cat.l}</div>
+          <div class="mc-title">${mem.title}</div>
+          <div class="mc-date">${mem.loc} · ${mem.date}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterCat(chip, cat) {
+  document.querySelectorAll('#city-filter-bar .chip').forEach(c=>c.classList.remove('on'));
+  chip.classList.add('on');
+  curFilter = cat;
+  renderMagnets(MEMS[curCity] || []);
+}
+
+function genMock(city) {
+  const cats=['food','place','cafe','shop','exp','random'];
+  const emojis=['🌸','🍵','🏛','🌙','🎋','🌊'];
+  return Array.from({length:city?.count||4},(_,i)=>({
+    id:100+i, emoji:emojis[i%emojis.length], cat:cats[i%cats.length],
+    loc:city?.name||'', date:`May ${i+1}`, title:`Memory ${i+1}`,
+    note:'A moment worth keeping.', tall:i%3===1, photo:''
+  }));
+}
+
+/* ── Memory detail ─────────────────────────────────────────── */
+function showDetail(mem) {
+  if (!mem || !mem.cat) return;
+  const cat = CAT[mem.cat];
+  const ps = document.getElementById('detail-photo-strip');
+  if (mem.photo) {
+    ps.style.backgroundImage = `url('${mem.photo}')`;
+    ps.style.backgroundSize  = 'cover';
+    ps.style.backgroundPosition = 'center';
+    document.getElementById('detail-emoji').style.display = 'none';
+  } else {
+    ps.style.backgroundImage = `linear-gradient(135deg,${GRAD[mem.cat]})`;
+    document.getElementById('detail-emoji').style.display = '';
+    document.getElementById('detail-emoji').textContent   = mem.emoji;
+  }
+  document.getElementById('d-cat').textContent   = `${cat.i} ${cat.l}`;
+  document.getElementById('d-cat').className     = `d-cat ${cat.c}`;
+  document.getElementById('d-date').textContent  = `${mem.date}, 2026`;
+  document.getElementById('d-title').textContent = mem.title;
+  document.getElementById('d-loc').textContent   = `${mem.loc} · Japan`;
+  document.getElementById('d-note').textContent  = mem.note || 'A moment worth keeping.';
+  document.getElementById('detail-backdrop').classList.add('open');
+  document.getElementById('detail-sheet-wrap').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail-backdrop').classList.remove('open');
+  document.getElementById('detail-sheet-wrap').classList.remove('open');
+}
+
+/* ── Capture ───────────────────────────────────────────────── */
+function openCapture() {
+  document.getElementById('tag-sheet').classList.remove('open');
+  document.getElementById('cap-controls').style.display = '';
+  document.getElementById('cap-save-bar').style.display = 'none';
+  document.querySelectorAll('.cat-opt').forEach(o=>o.classList.remove('sel'));
+  setCapType(document.querySelector('.cap-type[data-t="photo"]'),'photo');
+  document.getElementById('scr-capture').classList.add('open');
+}
+function closeCapture() {
+  document.getElementById('scr-capture').classList.remove('open');
+}
+
+function setCapType(el, t) {
+  if (!el) return;
+  document.querySelectorAll('.cap-type').forEach(x=>x.classList.remove('on'));
+  el.classList.add('on');
+  const vf = document.getElementById('cap-vf');
+  const na = document.getElementById('cap-note-area');
+  const ca = document.getElementById('cap-ci-area');
+  const ctrl = document.getElementById('cap-controls');
+  const sb   = document.getElementById('cap-save-bar');
+  vf.style.display = t==='photo' ? '' : 'none';
+  na.classList.toggle('on', t==='note');
+  ca.classList.toggle('on', t==='ci');
+  ctrl.style.display = t==='photo' ? '' : 'none';
+  sb.style.display   = t!=='photo' ? '' : 'none';
+}
+
+const CAM_SCENES = ['🏯','🗼','🌸','🍜','🛍','🌊','⛩','🌙'];
+let camIdx = 0;
+function rotateCam() {
+  camIdx=(camIdx+1)%CAM_SCENES.length;
+  const el = document.getElementById('cap-scene');
+  el.style.opacity=0;
+  setTimeout(()=>{el.textContent=CAM_SCENES[camIdx];el.style.opacity='.35';},140);
+}
+function takePhoto() {
+  const vf = document.getElementById('cap-vf');
+  vf.style.background='white';
+  setTimeout(()=>{
+    vf.style.background='';
+    document.getElementById('cap-controls').style.display='none';
+    document.getElementById('tag-sheet').classList.add('open');
+  },100);
+}
+function selCat(el) {
+  document.querySelectorAll('.cat-opt').forEach(o=>o.classList.remove('sel'));
+  el.classList.add('sel');
+}
+function saveMem() {
+  closeCapture();
+  setTimeout(()=>document.getElementById('cap-overlay').classList.add('show'),200);
+}
+function closeSaved() {
+  document.getElementById('cap-overlay').classList.remove('show');
+}
+
+/* ── Toast ─────────────────────────────────────────────────── */
+function toast(msg, icon) {
+  const el = document.getElementById('toast-el');
+  el.innerHTML = `<span>${icon||'✓'}</span>${msg}`;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>el.classList.remove('show'),2400);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MAPLIBRE GL MAP
+═══════════════════════════════════════════════════════════════ */
+(function () {
+
+  /* ── Visited country IDs (ISO 3166-1 numeric) ──────────────── */
+  /* Edit VISITED_IDS to highlight different countries           */
+  const VISITED_IDS       = [392, 250, 380, 36]; // Japan, France, Italy, Australia
+  const COUNTRY_KEY_TO_ID = { japan:392, france:250, italy:380, australia:36 };
+
+  /* ── Fly-to targets ─────────────────────────────────────────── */
+  const COUNTRY_TARGETS = {
+    japan:     { center:[138.5, 36.5],  zoom:5.5 },
+    france:    { center:[2.3,   46.2],  zoom:6.0 },
+    italy:     { center:[12.5,  42.5],  zoom:6.0 },
+    australia: { center:[134,  -25.0],  zoom:4.5 },
+  };
+
+  /* ── Country marker data ────────────────────────────────────── */
+  const COUNTRY_PINS = [
+    { key:'japan',     lngLat:[138.5, 36.5],  emoji:'🏯', label:'Japan',     count:12 },
+    { key:'france',    lngLat:[2.35,  46.2],  emoji:'🗼', label:'France',    count:7  },
+    { key:'italy',     lngLat:[12.5,  42.5],  emoji:'🏛', label:'Italy',     count:5  },
+    { key:'australia', lngLat:[134,   -25],   emoji:'🦘', label:'Australia', count:3  },
+  ];
+
+  /* ── City marker data ───────────────────────────────────────── */
+  const CITY_PINS = [
+    { country:'japan',    id:'tokyo',  lngLat:[139.69, 35.68], emoji:'🗼', name:'Tokyo',  count:8,  feat:true  },
+    { country:'japan',    id:'kyoto',  lngLat:[135.77, 35.01], emoji:'🏯', name:'Kyoto',  count:5,  feat:true  },
+    { country:'japan',    id:'osaka',  lngLat:[135.50, 34.69], emoji:'🏙', name:'Osaka',  count:4,  feat:false },
+    { country:'japan',    id:'nara',   lngLat:[135.83, 34.68], emoji:'🦌', name:'Nara',   count:2,  feat:false },
+    { country:'france',   id:'paris',  lngLat:[2.35,  48.85],  emoji:'🗼', name:'Paris',  count:5,  feat:true  },
+    { country:'france',   id:'nice',   lngLat:[7.26,  43.71],  emoji:'🌊', name:'Nice',   count:2,  feat:false },
+    { country:'italy',    id:'rome',   lngLat:[12.50, 41.90],  emoji:'🏛', name:'Rome',   count:3,  feat:true  },
+    { country:'italy',    id:'venice', lngLat:[12.34, 45.44],  emoji:'🚤', name:'Venice', count:2,  feat:false },
+    { country:'australia',id:'sydney', lngLat:[151.21,-33.87], emoji:'🦘', name:'Sydney', count:3,  feat:true  },
+  ];
+
+  /* ── Map initialisation ─────────────────────────────────────── */
+  const map = new maplibregl.Map({
+    container:          'map-el',
+    // Use the official MapLibre demo tiles — proper vector tiles that handle
+    // antimeridian-crossing countries (Russia, USA Alaska, etc.) correctly,
+    // eliminating the rendering seam/gap between continents.
+    style:              'https://demotiles.maplibre.org/style.json',
+    // Fit to the bounding box of all 4 visited countries on first load
+    bounds:             [[0, -38], [152, 55]],
+    fitBoundsOptions:   { padding: 40, duration: 0 },
+    minZoom:            1.0,
+    maxZoom:            14,
+    attributionControl: false,
+    dragRotate:         false,
+    pitchWithRotate:    false,
+    touchPitch:         false,
+    scrollZoom:         true,
+    dragPan:            true,
+    touchZoomRotate:    true,
+    doubleClickZoom:    true,
+    keyboard:           false,
+  });
+
+  /* ── Markers ─────────────────────────────────────────────────── */
+  let countryMarkers = [], cityMarkers = [];
+
+  function makePinEl(emoji, label, count, cls, feat) {
+    const el = document.createElement('div');
+    el.className = cls;
+    if (feat !== undefined) el.dataset.feat = feat ? 'true' : 'false';
+    el.innerHTML =
+      `<div class="map-pin-bubble">${emoji}</div>` +
+      `<div class="map-pin-tail"></div>` +
+      `<div class="map-pin-lbl">${label} <span>· ${count}</span></div>`;
+    return el;
+  }
+
+  const ZOOM_CITY_THR   = 4.0;
+  const ZOOM_DETAIL_THR = 6.0;
+
+  function updatePins() {
+    const z = map.getZoom();
+    const showCity = z >= ZOOM_CITY_THR;
+    const showAll  = z >= ZOOM_DETAIL_THR;
+    countryMarkers.forEach(({ el }) => el.classList.toggle('pin-hide', showCity));
+    cityMarkers.forEach(({ pin, el }) => {
+      el.classList.toggle('pin-show', showCity && (showAll || pin.feat));
+    });
+  }
+
+  function initMarkers() {
+    COUNTRY_PINS.forEach(pin => {
+      const el = makePinEl(pin.emoji, pin.label, pin.count, 'map-pin country-pin');
+      el.addEventListener('click', () => zoomToCountry(pin.key));
+      const m = new maplibregl.Marker({ element:el, anchor:'bottom' })
+        .setLngLat(pin.lngLat).addTo(map);
+      countryMarkers.push({ pin, marker:m, el });
+    });
+
+    CITY_PINS.forEach(pin => {
+      const el = makePinEl(pin.emoji, pin.name, pin.count, 'map-pin city-pin', pin.feat);
+      el.addEventListener('click', () => { curCountry = pin.country; drillCity(pin.id); });
+      const m = new maplibregl.Marker({ element:el, anchor:'bottom' })
+        .setLngLat(pin.lngLat).addTo(map);
+      cityMarkers.push({ pin, marker:m, el });
+    });
+
+    // "You are here" beacon — Kyoto
+    const locEl = document.createElement('div');
+    locEl.className = 'my-loc';
+    locEl.innerHTML = `<div class="my-loc-ring"><div class="my-loc-dot"></div></div>`;
+    new maplibregl.Marker({ element:locEl, anchor:'center' })
+      .setLngLat([135.77, 35.01]).addTo(map);
+  }
+
+  /* ── Map layers ─────────────────────────────────────────────── */
+  map.on('load', async () => {
+
+    // ── Restyle demotiles layers to match the warm Travel Magnet palette ──
+    // The demotiles style renders all countries/borders correctly (including
+    // antimeridian-crossing land like Russia and Alaska) — we just recolour.
+    map.getStyle().layers.forEach(layer => {
+      try {
+        if (layer.type === 'background') {
+          map.setPaintProperty(layer.id, 'background-color', '#d4e2eb');
+        } else if (layer.type === 'fill') {
+          map.setPaintProperty(layer.id, 'fill-color', '#e2d9cc');
+        } else if (layer.type === 'line') {
+          map.setPaintProperty(layer.id, 'line-color', '#d4c4ad');
+          map.setPaintProperty(layer.id, 'line-width', 0.7);
+          map.setPaintProperty(layer.id, 'line-opacity', 0.8);
+        } else if (layer.type === 'symbol') {
+          map.setLayoutProperty(layer.id, 'visibility', 'none');
+        }
+      } catch (e) { /* some properties don't apply to every layer — safe to ignore */ }
+    });
+
+    // ── Visited + active country highlights ──────────────────────
+    // GeoJSON for the 4 visited countries only — none cross the antimeridian,
+    // so no rendering artifacts from this source.
+    try {
+      const resp  = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+      const world = await resp.json();
+      const visitedGeo = {
+        type: 'FeatureCollection',
+        features: topojson.feature(world, world.objects.countries).features
+          .filter(f => VISITED_IDS.includes(+f.id))
+          .map(f => ({ ...f, properties:{ cid:+f.id } }))
+      };
+
+      map.addSource('countries', { type:'geojson', data:visitedGeo });
+
+      map.addLayer({ id:'visited-fill', type:'fill', source:'countries',
+        paint:{ 'fill-color':'#c07a4f', 'fill-opacity':0.22 } });
+
+      map.addLayer({ id:'visited-border', type:'line', source:'countries',
+        paint:{ 'line-color':'#c07a4f', 'line-width':1.5, 'line-opacity':0.6 } });
+
+      map.addLayer({ id:'active-fill', type:'fill', source:'countries',
+        filter:['==', ['get','cid'], -1],
+        paint:{ 'fill-color':'#c07a4f', 'fill-opacity':0.40 } });
+
+      map.addLayer({ id:'active-border', type:'line', source:'countries',
+        filter:['==', ['get','cid'], -1],
+        paint:{ 'line-color':'#c07a4f', 'line-width':2.5, 'line-opacity':0.85 } });
+
+    } catch(e) {
+      console.warn('Travel Magnet: highlight data unavailable.', e);
+    }
+
+    initMarkers();
+    updatePins();
+  });
+
+  map.on('zoom', updatePins);
+
+  /* ── Public API ──────────────────────────────────────────────── */
+  window._syncMapPins = function () {
+    map.resize();   // recalculate canvas size after container was hidden
+    updatePins();
+  };
+
+  window.mapZoom = function (delta) {
+    map.zoomBy(delta > 0 ? 1.2 : -1.2);
+  };
+
+  window.zoomToCountry = function (key) {
+    if (mapLevel !== 'world') { setMapLevel('world'); setBreadcrumb(); }
+    const t = COUNTRY_TARGETS[key];
+    if (!t) return;
+    map.flyTo({ center:t.center, zoom:t.zoom, duration:700, essential:true });
+    const id = COUNTRY_KEY_TO_ID[key] ?? -1;
+    if (map.getLayer('active-fill')) {
+      map.setFilter('active-fill',   ['==', ['get','cid'], id]);
+      map.setFilter('active-border', ['==', ['get','cid'], id]);
+    }
+  };
+
+})();
+
+/* ── Boot ──────────────────────────────────────────────────── */
+setBreadcrumb();
+setMapLevel('world'); // apply map-mode class on start
+setTimeout(()=>{
+  const p=document.getElementById('geo-prompt');
+  if(p){p.style.transition='opacity .5s';p.style.opacity='0';setTimeout(()=>p.style.display='none',500);}
+},8000);
+</script>
+</body>
+</html>
