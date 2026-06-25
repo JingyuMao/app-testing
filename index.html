@@ -4,12 +4,35 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Travel Magnet</title>
+
+<!-- Favicon & PWA -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="favicon.svg">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#c07a4f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Travel Magnet">
+
+<!-- SEO -->
+<meta name="description" content="Capture travel memories on an interactive map. Pin moments like fridge magnets — food, places, cafés, experiences.">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Travel Magnet">
+<meta property="og:description" content="Capture travel memories on an interactive map. Pin moments like fridge magnets.">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Travel Magnet">
+<meta name="twitter:description" content="Capture travel memories on an interactive map. Pin moments like fridge magnets.">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,600;1,600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css">
-<script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.js"></script>
 <style>
 /* ── Reset ─────────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -45,11 +68,21 @@
   --sh-md: 0 4px 20px rgba(60,40,20,.13);
   --sh-mag:0 6px 22px rgba(60,40,20,.18), 0 1px 4px rgba(60,40,20,.10), inset 0 1px 0 rgba(255,255,255,.8);
 }
-html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
+html,body{width:100%;height:100%;overflow:hidden;
+  /* overscroll-behavior:none kills iOS rubber-band scroll, which would otherwise
+     shift the document and cause MapLibre's DOM markers to drift from the
+     WebGL canvas (they live on separate GPU compositing layers). */
+  overscroll-behavior:none;
   font-family:'DM Sans',system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;background:var(--bg);}
-#app{width:100%;height:100vh;height:100dvh;max-width:430px;margin:0 auto;
-  position:relative;overflow:hidden;background:var(--bg);}
+#app{
+  /* position:fixed pins the container to the viewport, completely outside
+     the document scroll context. This keeps the MapLibre canvas and its DOM
+     marker siblings in the same compositing layer, preventing marker drift
+     during any viewport movement, iOS bounce, or orientation change. */
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  width:100%;max-width:430px;margin:0 auto;
+  overflow:hidden;background:var(--bg);}
 
 /* Paper grain */
 #app::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:1000;
@@ -83,15 +116,15 @@ html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
     inset 0 1px 0 rgba(255,255,255,.72),
     inset 0 -1px 0 rgba(200,170,130,.12);}
 .bnav-tab{display:flex;flex-direction:column;align-items:center;
-  gap:4px;cursor:pointer;padding:8px 18px;border-radius:14px;
-  transition:background .14s;min-width:60px;}
+  gap:3px;cursor:pointer;padding:8px 6px;border-radius:12px;
+  transition:background .14s;min-width:40px;flex:1;}
 .bnav-tab:active{background:rgba(192,122,79,.09);}
-.bnav-lbl{font-size:10px;font-weight:400;color:var(--muted);letter-spacing:.1px;}
+.bnav-lbl{font-size:9.5px;font-weight:400;color:var(--muted);letter-spacing:.05px;}
 .bnav-tab.on .bnav-lbl{color:var(--clay);}
 .bnav-tab.on svg{stroke:var(--clay);}
 
 /* Center FAB */
-.bnav-fab{width:54px;height:54px;border-radius:50%;
+.bnav-fab{width:48px;height:48px;border-radius:50%;
   background:linear-gradient(145deg,var(--clay-l),var(--clay));
   border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
   box-shadow:0 5px 20px rgba(192,122,79,.42);
@@ -358,7 +391,7 @@ html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
 /* ═══════════════════════════════════════════════════════════════
    SCREEN: ME
 ═══════════════════════════════════════════════════════════════ */
-#scr-me{position:absolute;inset:0;display:flex;flex-direction:column;
+#scr-me{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;
   background:var(--bg);opacity:0;pointer-events:none;
   transition:opacity .28s,transform .28s cubic-bezier(.4,0,.2,1);
   transform:translateX(24px);}
@@ -466,50 +499,20 @@ html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
 /* ═══════════════════════════════════════════════════════════════
    INTERACTIVE WORLD MAP
 ═══════════════════════════════════════════════════════════════ */
-/* Map mode: #map-content becomes a clipping viewport */
-#map-content.map-mode{overflow:hidden!important;padding-bottom:0!important;position:relative;}
-
-#view-world{position:absolute;inset:0;overflow:hidden;}
+/* map-area: flex slot that holds both the map canvas and the scroll content */
+#map-area{flex:1;position:relative;overflow:hidden;}
+/* map canvas: sits inside map-area, never inside the scroll container */
+#view-world{position:absolute;inset:0;overflow:hidden;z-index:0;}
+/* scroll content: overlays same space; show/hide alternates with #view-world */
+#map-content{position:absolute;inset:0;}
 
 /* ── MapLibre overrides ─────────────────────────────────────── */
 .maplibregl-ctrl-attrib,.maplibregl-ctrl-logo{display:none!important;}
-.maplibregl-marker{z-index:10;}
-
-/* Country / city markers — positioned by MapLibre, not manually */
-.map-pin{cursor:pointer;z-index:10;display:flex;flex-direction:column;align-items:center;gap:3px;}
-.map-pin-bubble{width:38px;height:38px;border-radius:50%;
-  background:var(--white);border:2.5px solid var(--clay);
-  display:flex;align-items:center;justify-content:center;font-size:17px;
-  box-shadow:0 3px 14px rgba(60,40,20,.28);transition:transform .15s;}
-.map-pin:active .map-pin-bubble{transform:scale(.88);}
-.map-pin-tail{width:2px;height:8px;background:var(--clay);border-radius:1px;}
-.map-pin-lbl{background:rgba(30,18,8,.72);backdrop-filter:blur(8px);
-  border-radius:var(--r-sm);padding:3px 8px;font-size:10px;font-weight:600;
-  color:white;white-space:nowrap;margin-top:2px;}
-.map-pin-lbl span{opacity:.65;font-weight:400;}
-
-/* Zoom-driven pin visibility */
-.country-pin{transition:opacity .35s,transform .35s;}
-.country-pin.pin-hide{opacity:0!important;pointer-events:none!important;transform:scale(.6);}
-.city-pin{opacity:0;pointer-events:none;transform:scale(.6);transition:opacity .35s,transform .35s;}
-.city-pin.pin-show{opacity:1;pointer-events:auto;transform:scale(1);}
-/* City pins: slightly smaller than country pins */
-.city-pin .map-pin-bubble{width:30px;height:30px;font-size:13px;border-width:2px;}
-.city-pin .map-pin-lbl{font-size:9px;padding:2px 7px;}
-
-/* My location beacon */
-.my-loc{position:absolute;transform:translate(-50%,-50%);z-index:15;pointer-events:none;}
-.my-loc-ring{width:22px;height:22px;border-radius:50%;
-  background:rgba(192,122,79,.18);display:flex;align-items:center;
-  justify-content:center;animation:locring 2.4s infinite;}
-@keyframes locring{0%,100%{box-shadow:0 0 0 0 rgba(192,122,79,.4);}
-  55%{box-shadow:0 0 0 12px rgba(192,122,79,0);}}
-.my-loc-dot{width:10px;height:10px;border-radius:50%;
-  background:var(--clay);border:2px solid white;
-  box-shadow:0 2px 8px rgba(192,122,79,.55);}
+/* Pins are now WebGL symbol/circle layers — no DOM marker CSS needed */
 
 /* Map overlays */
 .map-top-ov{position:absolute;top:12px;left:14px;right:14px;z-index:20;
+  display:flex;align-items:center;justify-content:space-between;
   display:flex;align-items:center;justify-content:space-between;gap:8px;pointer-events:none;}
 .map-stat-chip{background:rgba(250,247,242,.88);backdrop-filter:blur(14px);
   border:1px solid rgba(160,130,90,.14);border-radius:var(--r-def);
@@ -524,17 +527,14 @@ html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
   background:rgba(250,247,242,.92);backdrop-filter:blur(14px);
   box-shadow:0 4px 20px rgba(60,40,20,.14);}
 
-/* Zoom controls */
-.zoom-ctrls{position:absolute;right:14px;bottom:calc(210px + env(safe-area-inset-bottom));z-index:20;
-  display:flex;flex-direction:column;gap:6px;}
-.zoom-btn{width:38px;height:38px;border-radius:var(--r-sm);
+/* Map upload button */
+.map-upload-btn{width:36px;height:36px;border-radius:50%;flex-shrink:0;
   background:rgba(250,247,242,.92);backdrop-filter:blur(14px);
-  border:1px solid rgba(160,130,90,.14);
-  box-shadow:0 2px 8px rgba(60,40,20,.1);
+  border:1px solid rgba(160,130,90,.18);
+  box-shadow:0 2px 8px rgba(60,40,20,.12);
   display:flex;align-items:center;justify-content:center;
-  cursor:pointer;font-size:20px;font-weight:300;color:var(--brown);
-  line-height:1;transition:background .14s;user-select:none;}
-.zoom-btn:active{background:var(--sand);}
+  cursor:pointer;transition:background .14s;}
+.map-upload-btn:active{background:var(--sand);}
 
 /* ── Memory detail sheet ─────────────────────────────────────── */
 .detail-backdrop{position:absolute;inset:0;background:rgba(30,18,8,.45);
@@ -560,6 +560,202 @@ html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
   display:flex;align-items:center;gap:4px;}
 .d-note{background:var(--bg);border-radius:12px;padding:13px;
   font-size:13px;color:#6a5040;line-height:1.65;border-left:3px solid var(--clay);}
+
+/* ── Country progress panel ─────────────────────────────────── */
+.cpp{padding:0 18px 14px;}
+.cpp-status-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.cpp-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;
+  font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+  padding:4px 11px;border-radius:6px;}
+.cpp-badge.completed{background:rgba(192,122,79,.14);color:var(--clay);}
+.cpp-badge.partial{background:rgba(216,164,80,.12);color:#966810;}
+.cpp-badge.unvisited{background:var(--sand);color:var(--muted);}
+.cpp-bar{height:5px;background:var(--sand);border-radius:3px;
+  overflow:hidden;margin-bottom:9px;}
+.cpp-bar-fill{height:100%;border-radius:3px;
+  background:linear-gradient(90deg,var(--clay-l),var(--clay));
+  transition:width .45s cubic-bezier(.4,0,.2,1);}
+.cpp-bar-fill.partial{background:linear-gradient(90deg,#e8b96d,#c89040);}
+.cpp-meta{font-size:12px;color:var(--muted);line-height:1.6;}
+.cpp-meta strong{color:var(--brown);font-weight:600;}
+
+/* City tile locked/unlocked states */
+.city-tile.unlocked{position:relative;}
+.city-tile.locked{opacity:.4;cursor:default;}
+.city-tile.locked .ct-ph{font-size:26px;}
+.city-unlock-badge{position:absolute;top:7px;right:7px;z-index:2;
+  background:rgba(192,122,79,.86);color:white;
+  font-size:9px;font-weight:700;letter-spacing:.3px;
+  padding:3px 7px;border-radius:5px;backdrop-filter:blur(4px);}
+
+/* ── City detail card (map overlay) ─────────────────────────── */
+.city-card-wrap{position:absolute;bottom:0;left:0;right:0;z-index:165;
+  transform:translateY(100%);transition:transform .32s cubic-bezier(.4,0,.2,1);}
+.city-card-wrap.open{transform:translateY(0);}
+.city-card{background:var(--white);border-radius:22px 22px 0 0;
+  padding:14px 20px calc(100px + env(safe-area-inset-bottom)) 20px;
+  box-shadow:0 -6px 28px rgba(60,40,20,.18);}
+.cc-drag{display:flex;justify-content:center;margin-bottom:16px;}
+.cc-emoji-bg{width:64px;height:64px;border-radius:18px;
+  background:linear-gradient(135deg,#fff5e8,#fde4c0);
+  display:flex;align-items:center;justify-content:center;font-size:30px;
+  margin:0 auto 12px;border:1.5px solid rgba(192,122,79,.18);}
+.cc-city-name{font-size:20px;font-weight:800;color:var(--brown);
+  text-align:center;letter-spacing:-.3px;margin-bottom:3px;}
+.cc-country-lbl{font-size:12px;color:var(--muted);text-align:center;margin-bottom:16px;}
+.cc-stats{display:flex;gap:10px;margin-bottom:18px;}
+.cc-stat{flex:1;background:var(--bg);border-radius:12px;
+  padding:11px 8px;text-align:center;border:1px solid var(--bdr);}
+.cc-stat-n{font-size:15px;font-weight:700;color:var(--clay);}
+.cc-stat-l{font-size:9px;color:var(--muted);margin-top:2px;font-weight:500;
+  text-transform:uppercase;letter-spacing:.3px;}
+.cc-btn{width:100%;padding:14px;border-radius:14px;
+  background:linear-gradient(135deg,var(--clay-l),var(--clay));
+  border:none;font-size:14px;font-weight:700;color:white;cursor:pointer;
+  box-shadow:0 4px 16px rgba(192,122,79,.32);transition:transform .12s;}
+.cc-btn:active{transform:scale(.97);}
+
+/* ── Explore screen ────────────────────────────────────────── */
+#scr-explore{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;
+  background:var(--bg);opacity:0;pointer-events:none;
+  transition:opacity .28s,transform .28s cubic-bezier(.4,0,.2,1);
+  transform:translateX(-24px);}
+#scr-explore.open{opacity:1;pointer-events:all;transform:translateX(0);}
+
+.exp-topbar{flex-shrink:0;padding:4px 16px 10px;
+  display:flex;align-items:center;gap:10px;}
+.exp-search-wrap{flex:1;position:relative;}
+.exp-search{width:100%;height:38px;padding:0 14px 0 36px;
+  border-radius:20px;border:1.5px solid var(--bdr);
+  background:var(--white);font-size:13.5px;color:var(--brown);
+  font-family:'DM Sans',sans-serif;outline:none;
+  transition:border-color .16s;}
+.exp-search::placeholder{color:var(--muted);}
+.exp-search:focus{border-color:var(--clay);}
+.exp-search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);
+  pointer-events:none;}
+.exp-post-btn{width:34px;height:34px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,var(--clay-l),var(--clay));
+  border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 3px 10px rgba(192,122,79,.35);transition:transform .14s;}
+.exp-post-btn:active{transform:scale(.9);}
+
+.exp-cats{flex-shrink:0;display:flex;gap:7px;padding:0 16px 12px;
+  overflow-x:auto;scrollbar-width:none;}
+.exp-cats::-webkit-scrollbar{display:none;}
+.exp-cat{padding:6px 14px;border-radius:20px;font-size:12.5px;font-weight:600;
+  white-space:nowrap;cursor:pointer;border:none;
+  background:var(--white);color:var(--muted);border:1.5px solid var(--bdr);
+  transition:all .16s;}
+.exp-cat.on{background:var(--clay);color:white;border-color:var(--clay);}
+
+.exp-grid{flex:1;overflow-y:auto;padding:0 8px 12px;
+  columns:2;column-gap:8px;scrollbar-width:none;}
+.exp-grid::-webkit-scrollbar{display:none;}
+
+.exp-card{break-inside:avoid;margin-bottom:9px;
+  background:var(--white);border-radius:16px;
+  overflow:hidden;cursor:pointer;
+  box-shadow:var(--sh-sm);transition:transform .14s;}
+.exp-card:active{transform:scale(.975);}
+.exp-card-img{width:100%;display:block;object-fit:cover;
+  background:linear-gradient(135deg,#f5d8a0,#e8b870);}
+.exp-card-img.tall{height:190px;}
+.exp-card-img.short{height:130px;}
+.exp-card-img-fb{display:flex;align-items:center;justify-content:center;
+  font-size:42px;background:linear-gradient(135deg,#f9efe0,#f2ddc0);}
+.exp-card-body{padding:9px 10px 10px;}
+.exp-card-title{font-size:12.5px;font-weight:600;color:var(--brown);
+  line-height:1.4;margin-bottom:6px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.exp-card-loc{font-size:10.5px;color:var(--muted);margin-bottom:7px;
+  display:flex;align-items:center;gap:3px;}
+.exp-card-foot{display:flex;align-items:center;justify-content:space-between;}
+.exp-user{display:flex;align-items:center;gap:5px;}
+.exp-user-av{width:18px;height:18px;border-radius:50%;
+  background:linear-gradient(135deg,var(--clay-l),var(--clay));
+  display:flex;align-items:center;justify-content:center;
+  font-size:8px;font-weight:700;color:white;flex-shrink:0;}
+.exp-user-name{font-size:10px;color:var(--muted);font-weight:500;}
+.exp-likes{display:flex;align-items:center;gap:3px;font-size:10px;color:var(--muted);}
+.exp-likes svg{flex-shrink:0;}
+
+.exp-tag{display:inline-block;padding:2px 7px;border-radius:20px;
+  font-size:9.5px;font-weight:600;color:var(--clay);
+  background:rgba(192,122,79,.1);margin-bottom:5px;}
+
+.exp-empty{display:flex;flex-direction:column;align-items:center;
+  padding:60px 20px;color:var(--muted);font-size:14px;text-align:center;}
+.exp-empty-icon{font-size:42px;margin-bottom:12px;opacity:.6;}
+
+/* ── Wishlist screen ───────────────────────────────────────── */
+#scr-wishlist{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;
+  background:var(--bg);opacity:0;pointer-events:none;
+  transition:opacity .28s,transform .28s cubic-bezier(.4,0,.2,1);
+  transform:translateX(24px);}
+#scr-wishlist.open{opacity:1;pointer-events:all;transform:translateX(0);}
+
+.wl-header{flex-shrink:0;padding:4px 20px 14px;}
+.wl-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.wl-title{font-size:22px;font-weight:800;color:var(--brown);letter-spacing:-.4px;}
+.wl-count-chip{padding:4px 11px;border-radius:20px;
+  background:rgba(192,122,79,.12);font-size:12px;
+  font-weight:600;color:var(--clay);}
+.wl-filters{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;}
+.wl-filters::-webkit-scrollbar{display:none;}
+.wl-filter{padding:6px 14px;border-radius:20px;font-size:12.5px;font-weight:600;
+  white-space:nowrap;cursor:pointer;border:1.5px solid var(--bdr);
+  background:var(--white);color:var(--muted);transition:all .16s;}
+.wl-filter.on{background:var(--clay);color:white;border-color:var(--clay);}
+
+.wl-grid{flex:1;overflow-y:auto;padding:4px 14px 16px;
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;
+  align-content:start;scrollbar-width:none;}
+.wl-grid::-webkit-scrollbar{display:none;}
+
+.wl-card{background:var(--white);border-radius:18px;
+  overflow:hidden;cursor:pointer;
+  box-shadow:var(--sh-sm);transition:transform .14s;}
+.wl-card:active{transform:scale(.975);}
+.wl-card-top{height:90px;display:flex;align-items:center;justify-content:center;
+  font-size:38px;position:relative;}
+.wl-card-remove{position:absolute;top:8px;right:8px;width:22px;height:22px;
+  border-radius:50%;background:rgba(255,255,255,.85);
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:12px;color:var(--muted);transition:all .16s;}
+.wl-card-remove:hover{background:white;color:#e55;}
+.wl-card-body{padding:10px 11px 12px;}
+.wl-card-name{font-size:13px;font-weight:700;color:var(--brown);
+  margin-bottom:3px;line-height:1.3;}
+.wl-card-country{font-size:11px;color:var(--muted);margin-bottom:7px;}
+.wl-card-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;}
+.wl-tag{padding:2px 7px;border-radius:20px;font-size:9.5px;font-weight:600;
+  color:var(--clay);background:rgba(192,122,79,.1);}
+.wl-card-note{font-size:10.5px;color:var(--muted);line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+
+.wl-add-fab{position:absolute;bottom:calc(72px + env(safe-area-inset-bottom));right:18px;
+  width:50px;height:50px;border-radius:50%;
+  background:linear-gradient(135deg,var(--clay-l),var(--clay));
+  border:none;cursor:pointer;color:white;font-size:24px;font-weight:300;
+  box-shadow:0 4px 18px rgba(192,122,79,.38);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .14s;}
+.wl-add-fab:active{transform:scale(.92);}
+
+.wl-empty{display:flex;flex-direction:column;align-items:center;
+  padding:60px 20px;color:var(--muted);font-size:14px;text-align:center;
+  grid-column:1/-1;}
+.wl-empty-icon{font-size:46px;margin-bottom:14px;opacity:.55;}
+
+/* gradient bg helpers for wishlist cards */
+.wl-grad-1{background:linear-gradient(135deg,#fde4c0,#f9c0a8);}
+.wl-grad-2{background:linear-gradient(135deg,#c2e9fb,#a1c4fd);}
+.wl-grad-3{background:linear-gradient(135deg,#d4fc79,#96e6a1);}
+.wl-grad-4{background:linear-gradient(135deg,#f093fb,#f5576c);}
+.wl-grad-5{background:linear-gradient(135deg,#ffecd2,#fcb69f);}
+.wl-grad-6{background:linear-gradient(135deg,#a8edea,#fed6e3);}
 </style>
 </head>
 <body>
@@ -603,10 +799,10 @@ html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
     <div class="chip" onclick="filterCat(this,'random')">🎲 Random</div>
   </div>
 
-  <!-- Main content area -->
-  <div class="scroll" id="map-content" style="padding-bottom:calc(100px + env(safe-area-inset-bottom));">
+  <!-- Main content area: map canvas + scrollable views share the same flex slot -->
+  <div id="map-area">
 
-    <!-- ── WORLD: interactive map ───────────────────────── -->
+    <!-- ── WORLD: interactive map (outside scroll so markers stay geo-anchored) ── -->
     <div id="view-world">
 
       <!-- MapLibre GL JS map — pins & layers injected by JS -->
@@ -614,9 +810,12 @@ html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
 
       <!-- Stats chip (top-left overlay) -->
       <div class="map-top-ov" id="world-stats">
-        <div class="map-stat-chip">
-          <strong>4</strong> countries &nbsp;·&nbsp; <strong>8</strong> cities &nbsp;·&nbsp; <strong>27</strong> moments
+        <div class="map-stat-chip" id="world-stat-chip">
+          <strong>4</strong> countries &nbsp;·&nbsp; <strong>6</strong> cities &nbsp;·&nbsp; <strong>27</strong> moments
         </div>
+        <button class="map-upload-btn" onclick="toast('Upload photo to map','📷')">
+          <svg width="16" height="16" viewBox="0 0 22 22" fill="none" stroke="var(--brown)" stroke-width="2.2" stroke-linecap="round"><path d="M11 4V18M4 11H18"/></svg>
+        </button>
       </div>
 
       <!-- Geo prompt (bottom overlay) -->
@@ -631,25 +830,52 @@ html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
         </div>
       </div>
 
-      <!-- Zoom controls -->
-      <div class="zoom-ctrls">
-        <div class="zoom-btn" onclick="mapZoom(0.4)">+</div>
-        <div class="zoom-btn" onclick="mapZoom(-0.4)">−</div>
+
+      <!-- City detail card: slides up from bottom when a city pin is tapped -->
+      <div class="detail-backdrop" id="city-card-backdrop" onclick="closeCityCard()"></div>
+      <div class="city-card-wrap" id="city-card-wrap">
+        <div class="city-card">
+          <div class="cc-drag"><div class="detail-handle"></div></div>
+          <div class="cc-emoji-bg"><span id="cc-emoji">🏯</span></div>
+          <div class="cc-city-name" id="cc-name">City</div>
+          <div class="cc-country-lbl" id="cc-country">Country</div>
+          <div class="cc-stats">
+            <div class="cc-stat">
+              <div class="cc-stat-n" id="cc-date">—</div>
+              <div class="cc-stat-l">Check-in</div>
+            </div>
+            <div class="cc-stat">
+              <div class="cc-stat-n" id="cc-count">0</div>
+              <div class="cc-stat-l">Moments</div>
+            </div>
+            <div class="cc-stat">
+              <div class="cc-stat-n" id="cc-visits">1</div>
+              <div class="cc-stat-l">Visits</div>
+            </div>
+          </div>
+          <button class="cc-btn" onclick="cityCardViewMemories()">View Memories →</button>
+        </div>
       </div>
 
     </div><!-- /view-world -->
 
-    <!-- country: city grid -->
-    <div id="view-country" style="display:none;">
-      <div class="city-grid" id="city-grid"></div>
-    </div>
+    <!-- Scrollable content: country/city views (shown when map is hidden) -->
+    <div class="scroll" id="map-content">
 
-    <!-- city: magnet wall -->
-    <div id="view-city" style="display:none;">
-      <div class="magnet-wall" id="magnet-wall"></div>
-    </div>
+      <!-- country: city grid -->
+      <div id="view-country" style="display:none;">
+        <div id="country-progress-header"></div>
+        <div class="city-grid" id="city-grid"></div>
+      </div>
 
-  </div>
+      <!-- city: magnet wall -->
+      <div id="view-city" style="display:none;">
+        <div class="magnet-wall" id="magnet-wall"></div>
+      </div>
+
+    </div><!-- /map-content -->
+
+  </div><!-- /map-area -->
 
   <!-- City-level FAB -->
   <div class="map-fab" id="city-fab" style="display:none;">
@@ -661,15 +887,23 @@ html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
   <!-- Bottom nav -->
   <div class="bnav">
     <div class="bnav-tab on" id="tab-map" onclick="switchTab('map')">
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--clay)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l6-2 8 4 6-3v14l-6 3-8-4-6 2V5Z"/><path d="M7 3v14M15 7v14"/></svg>
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--clay)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l6-2 8 4 6-3v14l-6 3-8-4-6 2V5Z"/><path d="M7 3v14M15 7v14"/></svg>
       <span class="bnav-lbl" style="color:var(--clay);">Map</span>
     </div>
+    <div class="bnav-tab" id="tab-explore" onclick="switchTab('explore')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="9"/><path d="M9.5 12.5l2-5 2 5-2-1.2-2 1.2z"/><path d="M8.5 13.5l2.5-1.2 2.5 1.2-2.5 1-2.5-1z"/></svg>
+      <span class="bnav-lbl">Explore</span>
+    </div>
     <button class="bnav-fab" onclick="openCapture()">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3" fill="white" stroke="none"/><path d="M16 4H8L6.5 7H5a1 1 0 00-1 1"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="5.5"/><circle cx="12" cy="13" r="2.5" fill="white" stroke="none"/><path d="M15.5 5.5H8.5L7 8H5a1 1 0 00-1 1v1"/></svg>
     </button>
-    <div class="bnav-tab" id="tab-me" onclick="switchTab('me')">
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="7" r="3.5"/><path d="M3 19c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-      <span class="bnav-lbl">Me</span>
+    <div class="bnav-tab" id="tab-wishlist" onclick="switchTab('wishlist')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 18.5S3 13.2 3 8a4.07 4.07 0 014-4c1.5 0 2.8.8 3.5 2a4 4 0 013.5-2 4.07 4.07 0 014 4c0 5.2-8 10.5-8 10.5z"/></svg>
+      <span class="bnav-lbl">Wishlist</span>
+    </div>
+    <div class="bnav-tab" id="tab-passport" onclick="switchTab('passport')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="16" height="18" rx="2"/><path d="M8 2v18"/><circle cx="14" cy="9" r="2.5"/><path d="M10 14.5h8M10 17h6"/></svg>
+      <span class="bnav-lbl">Passport</span>
     </div>
   </div>
 
@@ -909,16 +1143,130 @@ html,body{width:100%;height:100vh;height:100dvh;overflow:hidden;
 
   <!-- Bottom nav (mirrored) -->
   <div class="bnav">
-    <div class="bnav-tab" id="tab-map-me" onclick="switchTab('map')">
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l6-2 8 4 6-3v14l-6 3-8-4-6 2V5Z"/><path d="M7 3v14M15 7v14"/></svg>
+    <div class="bnav-tab" id="tab-map-2" onclick="switchTab('map')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l6-2 8 4 6-3v14l-6 3-8-4-6 2V5Z"/><path d="M7 3v14M15 7v14"/></svg>
       <span class="bnav-lbl">Map</span>
     </div>
+    <div class="bnav-tab" id="tab-explore-2" onclick="switchTab('explore')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="9"/><path d="M9.5 12.5l2-5 2 5-2-1.2-2 1.2z"/><path d="M8.5 13.5l2.5-1.2 2.5 1.2-2.5 1-2.5-1z"/></svg>
+      <span class="bnav-lbl">Explore</span>
+    </div>
     <button class="bnav-fab" onclick="openCapture()">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3" fill="white" stroke="none"/><path d="M16 4H8L6.5 7H5a1 1 0 00-1 1"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="5.5"/><circle cx="12" cy="13" r="2.5" fill="white" stroke="none"/><path d="M15.5 5.5H8.5L7 8H5a1 1 0 00-1 1v1"/></svg>
     </button>
-    <div class="bnav-tab on" id="tab-me2">
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--clay)" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="7" r="3.5"/><path d="M3 19c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-      <span class="bnav-lbl" style="color:var(--clay);">Me</span>
+    <div class="bnav-tab" id="tab-wishlist-2" onclick="switchTab('wishlist')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 18.5S3 13.2 3 8a4.07 4.07 0 014-4c1.5 0 2.8.8 3.5 2a4 4 0 013.5-2 4.07 4.07 0 014 4c0 5.2-8 10.5-8 10.5z"/></svg>
+      <span class="bnav-lbl">Wishlist</span>
+    </div>
+    <div class="bnav-tab on" id="tab-passport-2" onclick="switchTab('passport')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--clay)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="16" height="18" rx="2"/><path d="M8 2v18"/><circle cx="14" cy="9" r="2.5"/><path d="M10 14.5h8M10 17h6"/></svg>
+      <span class="bnav-lbl" style="color:var(--clay);">Passport</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     EXPLORE SCREEN
+══════════════════════════════════════════════════════════════ -->
+<div id="scr-explore">
+  <div class="sb" style="color:var(--brown);"><span class="sb-time">9:41</span></div>
+
+  <!-- Search bar -->
+  <div class="exp-topbar">
+    <div class="exp-search-wrap">
+      <svg class="exp-search-icon" width="15" height="15" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M17 17l-3-3"/></svg>
+      <input class="exp-search" id="exp-search-input" type="search" placeholder="Search places, food, experiences…" oninput="filterExplorePosts(this.value)">
+    </div>
+    <button class="exp-post-btn" onclick="toast('Share your travel story','✍️')">
+      <svg width="16" height="16" viewBox="0 0 22 22" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M11 4V18M4 11H18"/></svg>
+    </button>
+  </div>
+
+  <!-- Category pills -->
+  <div class="exp-cats" id="exp-cats">
+    <button class="exp-cat on" onclick="setExpCat(this,'all')">All</button>
+    <button class="exp-cat" onclick="setExpCat(this,'popular')">🔥 Popular</button>
+    <button class="exp-cat" onclick="setExpCat(this,'food')">🍜 Food</button>
+    <button class="exp-cat" onclick="setExpCat(this,'nature')">🌿 Nature</button>
+    <button class="exp-cat" onclick="setExpCat(this,'culture')">🏛️ Culture</button>
+    <button class="exp-cat" onclick="setExpCat(this,'cafe')">☕ Café</button>
+    <button class="exp-cat" onclick="setExpCat(this,'city')">🏙️ City</button>
+  </div>
+
+  <!-- Masonry post grid -->
+  <div class="exp-grid" id="exp-grid"></div>
+
+  <!-- Bottom nav -->
+  <div class="bnav">
+    <div class="bnav-tab" id="tab-map-3" onclick="switchTab('map')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l6-2 8 4 6-3v14l-6 3-8-4-6 2V5Z"/><path d="M7 3v14M15 7v14"/></svg>
+      <span class="bnav-lbl">Map</span>
+    </div>
+    <div class="bnav-tab on" id="tab-explore-3" onclick="switchTab('explore')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--clay)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="9"/><path d="M9.5 12.5l2-5 2 5-2-1.2-2 1.2z"/><path d="M8.5 13.5l2.5-1.2 2.5 1.2-2.5 1-2.5-1z"/></svg>
+      <span class="bnav-lbl" style="color:var(--clay);">Explore</span>
+    </div>
+    <button class="bnav-fab" onclick="openCapture()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="5.5"/><circle cx="12" cy="13" r="2.5" fill="white" stroke="none"/><path d="M15.5 5.5H8.5L7 8H5a1 1 0 00-1 1v1"/></svg>
+    </button>
+    <div class="bnav-tab" id="tab-wishlist-3" onclick="switchTab('wishlist')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 18.5S3 13.2 3 8a4.07 4.07 0 014-4c1.5 0 2.8.8 3.5 2a4 4 0 013.5-2 4.07 4.07 0 014 4c0 5.2-8 10.5-8 10.5z"/></svg>
+      <span class="bnav-lbl">Wishlist</span>
+    </div>
+    <div class="bnav-tab" id="tab-passport-3" onclick="switchTab('passport')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="16" height="18" rx="2"/><path d="M8 2v18"/><circle cx="14" cy="9" r="2.5"/><path d="M10 14.5h8M10 17h6"/></svg>
+      <span class="bnav-lbl">Passport</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     WISHLIST SCREEN
+══════════════════════════════════════════════════════════════ -->
+<div id="scr-wishlist">
+  <div class="sb" style="color:var(--brown);"><span class="sb-time">9:41</span></div>
+
+  <div class="wl-header">
+    <div class="wl-title-row">
+      <div class="wl-title">Wishlist</div>
+      <div class="wl-count-chip" id="wl-count-chip">6 saved</div>
+    </div>
+    <div class="wl-filters" id="wl-filters">
+      <button class="wl-filter on" onclick="setWlFilter(this,'all')">All</button>
+      <button class="wl-filter" onclick="setWlFilter(this,'nature')">🌿 Nature</button>
+      <button class="wl-filter" onclick="setWlFilter(this,'food')">🍜 Food</button>
+      <button class="wl-filter" onclick="setWlFilter(this,'adventure')">🏔️ Adventure</button>
+      <button class="wl-filter" onclick="setWlFilter(this,'beach')">🏝️ Beach</button>
+      <button class="wl-filter" onclick="setWlFilter(this,'culture')">🏛️ Culture</button>
+    </div>
+  </div>
+
+  <!-- Destination grid -->
+  <div class="wl-grid" id="wl-grid"></div>
+
+  <!-- Add FAB -->
+  <button class="wl-add-fab" onclick="toast('Add destination — coming soon','➕')">+</button>
+
+  <!-- Bottom nav -->
+  <div class="bnav">
+    <div class="bnav-tab" id="tab-map-4" onclick="switchTab('map')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l6-2 8 4 6-3v14l-6 3-8-4-6 2V5Z"/><path d="M7 3v14M15 7v14"/></svg>
+      <span class="bnav-lbl">Map</span>
+    </div>
+    <div class="bnav-tab" id="tab-explore-4" onclick="switchTab('explore')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="9"/><path d="M9.5 12.5l2-5 2 5-2-1.2-2 1.2z"/><path d="M8.5 13.5l2.5-1.2 2.5 1.2-2.5 1-2.5-1z"/></svg>
+      <span class="bnav-lbl">Explore</span>
+    </div>
+    <button class="bnav-fab" onclick="openCapture()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="5.5"/><circle cx="12" cy="13" r="2.5" fill="white" stroke="none"/><path d="M15.5 5.5H8.5L7 8H5a1 1 0 00-1 1v1"/></svg>
+    </button>
+    <div class="bnav-tab on" id="tab-wishlist-4" onclick="switchTab('wishlist')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--clay)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 18.5S3 13.2 3 8a4.07 4.07 0 014-4c1.5 0 2.8.8 3.5 2a4 4 0 013.5-2 4.07 4.07 0 014 4c0 5.2-8 10.5-8 10.5z"/></svg>
+      <span class="bnav-lbl" style="color:var(--clay);">Wishlist</span>
+    </div>
+    <div class="bnav-tab" id="tab-passport-4" onclick="switchTab('passport')">
+      <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="16" height="18" rx="2"/><path d="M8 2v18"/><circle cx="14" cy="9" r="2.5"/><path d="M10 14.5h8M10 17h6"/></svg>
+      <span class="bnav-lbl">Passport</span>
     </div>
   </div>
 </div>
@@ -978,6 +1326,52 @@ const COUNTRIES = {
 
 const EMOJIS = {tokyo:'🗼',kyoto:'🏯',osaka:'🏙',nara:'🦌',paris:'🗼',nice:'🌊',rome:'🏛',venice:'🚤',sydney:'🦘'};
 
+/* ── Country completion rules ──────────────────────────────── */
+// How many distinct cities the user must check-in to "complete" a country.
+const COUNTRY_RULES = {
+  japan:     { required:3 },  // 3 of 4 cities
+  france:    { required:2 },  // both cities
+  italy:     { required:2 },  // both cities
+  australia: { required:1 },  // just Sydney
+};
+
+/* ── City check-in state ───────────────────────────────────── */
+// Simulated persistent check-in data (replace with real storage later).
+const CITY_CHECKINS = {
+  tokyo:  { checkedIn:true,  date:'May 3',   year:2026, visitCount:8 },
+  kyoto:  { checkedIn:true,  date:'May 5',   year:2026, visitCount:5 },
+  osaka:  { checkedIn:true,  date:'May 6',   year:2026, visitCount:4 },
+  nara:   { checkedIn:false, date:null,      year:null,  visitCount:0 },
+  paris:  { checkedIn:true,  date:'Jun 1',   year:2026, visitCount:5 },
+  nice:   { checkedIn:false, date:null,      year:null,  visitCount:0 },
+  rome:   { checkedIn:true,  date:'Apr 10',  year:2026, visitCount:3 },
+  venice: { checkedIn:false, date:null,      year:null,  visitCount:0 },
+  sydney: { checkedIn:true,  date:'Mar 5',   year:2026, visitCount:3 },
+};
+
+/* ── Progress calculator ───────────────────────────────────── */
+function getCountryProgress(key) {
+  const c = COUNTRIES[key], r = COUNTRY_RULES[key];
+  if (!c || !r) return { state:'unvisited', unlockedCount:0, requiredCount:1, totalCities:0 };
+  const unlockedCount = c.cityList.filter(ci => CITY_CHECKINS[ci.id]?.checkedIn).length;
+  const state = unlockedCount === 0 ? 'unvisited'
+              : unlockedCount >= r.required ? 'completed' : 'partial';
+  return { state, unlockedCount, requiredCount:r.required, totalCities:c.cityList.length };
+}
+
+/* ── Global stats from check-in data ──────────────────────── */
+function updateWorldStats() {
+  let countries = 0, cities = 0, moments = 0;
+  Object.keys(COUNTRIES).forEach(k => {
+    const p = getCountryProgress(k);
+    if (p.unlockedCount > 0) { countries++; cities += p.unlockedCount; }
+    moments += COUNTRIES[k].memories;
+  });
+  const chip = document.getElementById('world-stat-chip');
+  if (chip) chip.innerHTML =
+    `<strong>${countries}</strong> countries &nbsp;·&nbsp; <strong>${cities}</strong> cities &nbsp;·&nbsp; <strong>${moments}</strong> moments`;
+}
+
 const MEMS = {
   tokyo:[
     {id:1,emoji:'🍜',cat:'food',  loc:'Shinjuku', date:'May 3',  title:'Ichiran Ramen',         note:'Solo booth, red curtain, just me and the broth.',tall:false, photo:'https://images.unsplash.com/photo-TWTxHN2QIGc?w=400&q=80&fit=crop&auto=format'},
@@ -992,6 +1386,143 @@ const MEMS = {
 };
 
 const GRAD = {food:'#ff9a9e,#fecfef',place:'#a1c4fd,#c2e9fb',cafe:'#ffecd2,#fcb69f',shop:'#d9a7c7,#fffcdc',exp:'#d4fc79,#96e6a1',random:'#f093fb,#f5576c'};
+
+/* ── Explore data ──────────────────────────────────────────── */
+const EXPLORE_POSTS = [
+  { id:1,  title:'Cherry blossom season in Kyoto — worth every yen',         loc:'Kyoto · Japan',      user:'sakura_diary',    av:'S', likes:2341, tag:'nature',  tall:true,
+    img:'https://images.unsplash.com/photo-1522383225653-ed111181a951?w=400&q=70&fit=crop&auto=format' },
+  { id:2,  title:'Best tonkotsu I\'ve ever had — Fukuoka wins',              loc:'Fukuoka · Japan',     user:'noodle_dao',      av:'N', likes:876,  tag:'food',    tall:false,
+    img:'https://images.unsplash.com/photo-1569718218893-99d00b18ba3e?w=400&q=70&fit=crop&auto=format' },
+  { id:3,  title:'Seine at golden hour, no filter needed',                   loc:'Paris · France',      user:'paris.mood',      av:'P', likes:1587, tag:'city',    tall:true,
+    img:'https://images.unsplash.com/photo-1499856871958-5b9357976b82?w=400&q=70&fit=crop&auto=format' },
+  { id:4,  title:'Hidden gelato spot near the Pantheon — locals only know',  loc:'Rome · Italy',        user:'italyeats',       av:'I', likes:432,  tag:'food',    tall:false,
+    img:'https://images.unsplash.com/photo-1567306226416-28f0efdc88ce?w=400&q=70&fit=crop&auto=format' },
+  { id:5,  title:'Bondi to Coogee coastal walk at dawn — pure magic',        loc:'Sydney · Australia',  user:'aus_wanders',     av:'A', likes:908,  tag:'nature',  tall:false,
+    img:'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=400&q=70&fit=crop&auto=format' },
+  { id:6,  title:'Fushimi Inari gates at 4am — the secret is the timing',    loc:'Kyoto · Japan',       user:'temple.seeker',   av:'T', likes:3201, tag:'culture', tall:true,
+    img:'https://images.unsplash.com/photo-1478436127897-769e1b3f0f36?w=400&q=70&fit=crop&auto=format' },
+  { id:7,  title:'Montmartre café hopping on a rainy afternoon',             loc:'Paris · France',      user:'cafe.chronicles', av:'C', likes:654,  tag:'cafe',    tall:false,
+    img:'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&q=70&fit=crop&auto=format' },
+  { id:8,  title:'Osaka street food marathon — 12 dishes in one night',      loc:'Osaka · Japan',       user:'hungry_globe',    av:'H', likes:1122, tag:'food',    tall:true,
+    img:'https://images.unsplash.com/photo-1504214208698-ea1916a2195a?w=400&q=70&fit=crop&auto=format' },
+  { id:9,  title:'The Colosseum at sunrise, before the crowds arrive',       loc:'Rome · Italy',        user:'early.riser',     av:'E', likes:2088, tag:'culture', tall:false,
+    img:'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&q=70&fit=crop&auto=format' },
+  { id:10, title:'Tokyo Tower from a tiny alley I almost missed',            loc:'Tokyo · Japan',       user:'alley.finder',    av:'F', likes:741,  tag:'city',    tall:false,
+    img:'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400&q=70&fit=crop&auto=format' },
+];
+
+let expActiveCat = 'all';
+let expSearchQuery = '';
+
+function renderExplorePosts() {
+  const grid = document.getElementById('exp-grid');
+  if (!grid) return;
+  const q = expSearchQuery.toLowerCase();
+  const posts = EXPLORE_POSTS.filter(p => {
+    const catMatch = expActiveCat === 'all' || expActiveCat === 'popular' || p.tag === expActiveCat;
+    const qMatch = !q || p.title.toLowerCase().includes(q) || p.loc.toLowerCase().includes(q) || p.user.toLowerCase().includes(q);
+    return catMatch && qMatch;
+  });
+  if (!posts.length) {
+    grid.innerHTML = `<div class="exp-empty"><div class="exp-empty-icon">🔍</div>No posts found for "${expSearchQuery}"</div>`;
+    grid.style.columns = '1';
+    return;
+  }
+  grid.style.columns = '';
+  grid.innerHTML = posts.map(p => `
+    <div class="exp-card" onclick="toast('${p.title.substring(0,30)}…','📖')">
+      <img class="exp-card-img ${p.tall ? 'tall' : 'short'}" src="${p.img}"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+           alt="${p.title}" loading="lazy">
+      <div class="exp-card-img-fb ${p.tall ? 'tall' : 'short'}" style="display:none;height:${p.tall?190:130}px;">🌏</div>
+      <div class="exp-card-body">
+        <div class="exp-tag">${p.tag}</div>
+        <div class="exp-card-title">${p.title}</div>
+        <div class="exp-card-loc">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 1C4.3 1 3 2.3 3 4C3 6.5 6 11 6 11C6 11 9 6.5 9 4C9 2.3 7.7 1 6 1ZM6 5.2C5.3 5.2 4.8 4.7 4.8 4C4.8 3.3 5.3 2.8 6 2.8C6.7 2.8 7.2 3.3 7.2 4C7.2 4.7 6.7 5.2 6 5.2Z" fill="var(--muted)"/></svg>
+          ${p.loc}
+        </div>
+        <div class="exp-card-foot">
+          <div class="exp-user">
+            <div class="exp-user-av">${p.av}</div>
+            <span class="exp-user-name">${p.user}</span>
+          </div>
+          <div class="exp-likes">
+            <svg width="11" height="11" viewBox="0 0 22 22" fill="var(--muted)" stroke="none"><path d="M11 19S3 13.2 3 8a4.07 4.07 0 014-4c1.5 0 2.8.8 3.5 2a4 4 0 013.5-2 4.07 4.07 0 014 4c0 5.2-8 11-8 11z"/></svg>
+            ${p.likes >= 1000 ? (p.likes/1000).toFixed(1)+'k' : p.likes}
+          </div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function setExpCat(el, cat) {
+  document.querySelectorAll('.exp-cat').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  expActiveCat = cat;
+  renderExplorePosts();
+}
+
+function filterExplorePosts(q) {
+  expSearchQuery = q;
+  renderExplorePosts();
+}
+
+/* ── Wishlist data ─────────────────────────────────────────── */
+const WISHLIST_ITEMS = [
+  { id:1, emoji:'🗻', grad:'wl-grad-1', name:'Hokkaido in Winter',   country:'🇯🇵 Japan',       tags:['Snow','Nature'],    note:'Ski Niseko and see the powder snow fields' },
+  { id:2, emoji:'🏝️', grad:'wl-grad-2', name:'Bali',                 country:'🇮🇩 Indonesia',    tags:['Beach','Culture'],  note:'Temple trails and rice terraces in Ubud' },
+  { id:3, emoji:'🏔️', grad:'wl-grad-3', name:'Patagonia',            country:'🇦🇷 Argentina',    tags:['Adventure','Hike'], note:'Torres del Paine circuit trek' },
+  { id:4, emoji:'🕌',  grad:'wl-grad-4', name:'Marrakech Medina',    country:'🇲🇦 Morocco',      tags:['Culture','Food'],   note:'Spice market and rooftop dinners' },
+  { id:5, emoji:'🌊', grad:'wl-grad-5', name:'Amalfi Coast',         country:'🇮🇹 Italy',        tags:['Scenic','Road Trip'],note:'Drive from Positano to Ravello' },
+  { id:6, emoji:'🌸', grad:'wl-grad-6', name:'Tulip Season',         country:'🇳🇱 Netherlands',  tags:['Nature','Spring'],  note:'Keukenhof garden in April' },
+];
+
+let wlActiveFilter = 'all';
+let wlRemoved = new Set();
+
+function renderWishlist() {
+  const grid = document.getElementById('wl-grid');
+  const chip = document.getElementById('wl-count-chip');
+  if (!grid) return;
+  const items = WISHLIST_ITEMS.filter(i => {
+    if (wlRemoved.has(i.id)) return false;
+    if (wlActiveFilter === 'all') return true;
+    return i.tags.some(t => t.toLowerCase() === wlActiveFilter);
+  });
+  if (chip) chip.textContent = `${WISHLIST_ITEMS.length - wlRemoved.size} saved`;
+  if (!items.length) {
+    grid.innerHTML = `<div class="wl-empty"><div class="wl-empty-icon">❤️</div>No destinations here yet.<br>Tap + to add one.</div>`;
+    return;
+  }
+  grid.innerHTML = items.map(i => `
+    <div class="wl-card" id="wl-card-${i.id}">
+      <div class="wl-card-top ${i.grad}">
+        <span style="filter:drop-shadow(0 2px 4px rgba(0,0,0,.15))">${i.emoji}</span>
+        <button class="wl-card-remove" onclick="removeWishlistItem(${i.id},event)" title="Remove">✕</button>
+      </div>
+      <div class="wl-card-body">
+        <div class="wl-card-name">${i.name}</div>
+        <div class="wl-card-country">${i.country}</div>
+        <div class="wl-card-tags">${i.tags.map(t=>`<span class="wl-tag">${t}</span>`).join('')}</div>
+        <div class="wl-card-note">${i.note}</div>
+      </div>
+    </div>`).join('');
+}
+
+function removeWishlistItem(id, e) {
+  e.stopPropagation();
+  const card = document.getElementById(`wl-card-${id}`);
+  if (card) { card.style.opacity='0'; card.style.transform='scale(.88)'; card.style.transition='all .22s'; }
+  setTimeout(() => { wlRemoved.add(id); renderWishlist(); }, 220);
+}
+
+function setWlFilter(el, filter) {
+  document.querySelectorAll('.wl-filter').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  wlActiveFilter = filter;
+  renderWishlist();
+}
 const CAT  = {food:{l:'Food',c:'cat-food',i:'🍜'},place:{l:'Place',c:'cat-place',i:'🗺'},cafe:{l:'Café',c:'cat-cafe',i:'☕'},shop:{l:'Shopping',c:'cat-shop',i:'🛍'},exp:{l:'Experience',c:'cat-exp',i:'✨'},random:{l:'Random',c:'cat-random',i:'🎲'}};
 
 /* ── Map state ─────────────────────────────────────────────── */
@@ -1002,43 +1533,65 @@ let curFilter  = 'all';
 
 /* ── Tab switching ─────────────────────────────────────────── */
 function switchTab(tab) {
-  if (tab === 'map') {
-    document.getElementById('scr-me').classList.remove('open');
-    document.getElementById('tab-map').classList.add('on');
-    document.getElementById('tab-me').classList.remove('on');
-    document.getElementById('tab-me').querySelector('.bnav-lbl').style.color = '';
-    document.getElementById('tab-map').querySelector('.bnav-lbl').style.color = 'var(--clay)';
-    document.getElementById('tab-map').querySelector('svg').setAttribute('stroke','var(--clay)');
-    document.getElementById('tab-me').querySelector('svg').setAttribute('stroke','var(--muted)');
-  } else {
-    document.getElementById('scr-me').classList.add('open');
-    document.getElementById('tab-map').classList.remove('on');
-    document.getElementById('tab-me').classList.add('on');
-    document.getElementById('tab-me').querySelector('.bnav-lbl').style.color = 'var(--clay)';
-    document.getElementById('tab-map').querySelector('.bnav-lbl').style.color = '';
-    document.getElementById('tab-map').querySelector('svg').setAttribute('stroke','var(--muted)');
-    document.getElementById('tab-me').querySelector('svg').setAttribute('stroke','var(--clay)');
+  const SCR_MAP = { explore:'scr-explore', wishlist:'scr-wishlist', passport:'scr-me' };
+
+  // Close any open map detail sheets when leaving map
+  if (tab !== 'map') {
+    if (typeof closeDetail === 'function') closeDetail();
+    if (typeof closeCityCard === 'function') closeCityCard();
+    // #app can accumulate scrollTop from inner scroll containers; reset so
+    // position:absolute overlay screens (which use #app as containing block) sit at top:0
+    document.getElementById('app').scrollTop = 0;
   }
+
+  // Close all overlay screens
+  ['scr-me','scr-explore','scr-wishlist'].forEach(id =>
+    document.getElementById(id)?.classList.remove('open'));
+
+  // Open target screen (map = base layer, always visible)
+  if (tab !== 'map') {
+    document.getElementById(SCR_MAP[tab])?.classList.add('open');
+  }
+
+  // Sync all four nav bars (suffixes: ''=map, '-2'=passport, '-3'=explore, '-4'=wishlist)
+  const TAB_IDS = ['map','explore','wishlist','passport'];
+  ['','-2','-3','-4'].forEach(sfx => {
+    TAB_IDS.forEach(id => {
+      const el = document.getElementById(`tab-${id}${sfx}`);
+      if (!el) return;
+      const active = id === tab;
+      el.classList.toggle('on', active);
+      const lbl = el.querySelector('.bnav-lbl');
+      const svg = el.querySelector('svg');
+      if (lbl) lbl.style.color = active ? 'var(--clay)' : '';
+      if (svg) svg.setAttribute('stroke', active ? 'var(--clay)' : 'var(--muted)');
+    });
+  });
 }
 
 /* ── Map zoom ──────────────────────────────────────────────── */
 function setMapLevel(level) {
   mapLevel = level;
   const mc = document.getElementById('map-content');
+  const vw = document.getElementById('view-world');
   const isMapWorld = level === 'world';
 
-  // Map-mode: clip the content area so the interactive map fills it
+  // Show the map canvas OR the scrollable content — never both at once.
+  // #view-world is now a sibling of #map-content (not inside it), so scroll
+  // position can never offset the map canvas or drift its markers.
   if (isMapWorld) {
-    mc.classList.add('map-mode');
-    // Re-sync pin visibility whenever we return to the world map
+    if (vw) vw.style.display = '';
+    mc.style.display = 'none';
+    // Resize map after the layout settles so MapLibre recalculates marker positions
     requestAnimationFrame(() => { if (window._syncMapPins) window._syncMapPins(); });
   } else {
-    mc.classList.remove('map-mode');
+    if (vw) vw.style.display = 'none';
+    mc.style.display = '';
+    mc.scrollTop = 0;
     mc.style.paddingBottom = 'calc(100px + env(safe-area-inset-bottom))';
   }
 
-  // show/hide views
-  document.getElementById('view-world').style.display   = level==='world'   ? '' : 'none';
+  // show/hide sub-views
   document.getElementById('view-country').style.display = level==='country' ? '' : 'none';
   document.getElementById('view-city').style.display    = level==='city'    ? '' : 'none';
 
@@ -1052,8 +1605,6 @@ function setMapLevel(level) {
   // stats + geo overlay (inside map)
   const ws = document.getElementById('world-stats');
   if (ws) ws.style.display = isMapWorld ? '' : 'none';
-  // scroll to top (for non-map views)
-  if (!isMapWorld) mc.scrollTop = 0;
 }
 
 function setBreadcrumb() {
@@ -1071,7 +1622,7 @@ function setBreadcrumb() {
 /* ── Drill down ────────────────────────────────────────────── */
 function drillWorld() {
   curCountry = null; curCity = null;
-  // setMapLevel first — updates mapLevel before setBreadcrumb reads it
+  closeCityCard();
   setMapLevel('world'); setBreadcrumb();
 }
 
@@ -1079,17 +1630,52 @@ function drillCountry(key) {
   curCountry = key;
   const d = COUNTRIES[key];
   if (!d) return;
-  // render cities
-  document.getElementById('city-grid').innerHTML = d.cityList.map(c => `
-    <div class="city-tile${c.feat?' feat':''}" onclick="drillCity('${c.id}')">
-      <img class="ct-img" src="${c.photo}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">
-      <div class="ct-ph" style="display:none">${EMOJIS[c.id]||'🌍'}</div>
+
+  const prog = getCountryProgress(key);
+  const pct  = prog.requiredCount > 0
+    ? Math.min(100, Math.round(prog.unlockedCount / prog.requiredCount * 100)) : 0;
+  const stateLabel = { completed:'Completed', partial:'Partially Visited', unvisited:'Unvisited' };
+  const remaining  = Math.max(0, prog.requiredCount - prog.unlockedCount);
+  const metaHtml   = prog.state === 'completed'
+    ? `<strong>${prog.unlockedCount} cities</strong> visited &nbsp;·&nbsp; <strong>Country complete!</strong>`
+    : prog.state === 'partial'
+    ? `<strong>${prog.unlockedCount}/${prog.requiredCount} cities</strong> visited &nbsp;·&nbsp; ${remaining} more to complete ${d.name}`
+    : `No cities visited yet`;
+
+  document.getElementById('country-progress-header').innerHTML = `
+    <div class="cpp">
+      <div class="cpp-status-row">
+        <span class="cpp-badge ${prog.state}">${stateLabel[prog.state]}</span>
+      </div>
+      <div class="cpp-bar">
+        <div class="cpp-bar-fill${prog.state==='partial'?' partial':''}" style="width:${pct}%"></div>
+      </div>
+      <div class="cpp-meta">${metaHtml}</div>
+    </div>`;
+
+  document.getElementById('city-grid').innerHTML = d.cityList.map(c => {
+    const ci = CITY_CHECKINS[c.id];
+    const unlocked = !!ci?.checkedIn;
+    const clickAttr = unlocked
+      ? `onclick="drillCity('${c.id}')"`
+      : `onclick="toast('Visit ${c.name} to unlock this city','🔒')"`;
+    return `
+    <div class="city-tile${c.feat?' feat':''} ${unlocked?'unlocked':'locked'}" ${clickAttr}>
+      ${unlocked
+        ? `<img class="ct-img" src="${c.photo}" alt="${c.name}" loading="lazy"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        : ''}
+      <div class="ct-ph" style="${unlocked?'display:none':''}">
+        ${unlocked ? EMOJIS[c.id]||'🌍' : '🔒'}
+      </div>
+      ${unlocked ? `<div class="city-unlock-badge">✓ Visited</div>` : ''}
       <div class="ct-ov">
         <div class="ct-name">${c.name}</div>
-        <div class="ct-cnt">${c.count} memories</div>
+        <div class="ct-cnt">${unlocked ? c.count+' memories' : 'Not visited yet'}</div>
       </div>
-    </div>`).join('');
-  // setMapLevel first — updates mapLevel before setBreadcrumb reads it
+    </div>`;
+  }).join('');
+
   setMapLevel('country'); setBreadcrumb();
 }
 
@@ -1185,6 +1771,28 @@ function closeDetail() {
   document.getElementById('detail-sheet-wrap').classList.remove('open');
 }
 
+/* ── City detail card (map overlay) ───────────────────────── */
+function showCityCard(cityId, countryKey, cityName, emoji) {
+  const ci = CITY_CHECKINS[cityId];
+  if (!ci?.checkedIn) return;
+  document.getElementById('cc-emoji').textContent   = emoji || EMOJIS[cityId] || '📍';
+  document.getElementById('cc-name').textContent    = cityName;
+  document.getElementById('cc-country').textContent = COUNTRIES[countryKey]?.name || countryKey;
+  document.getElementById('cc-date').textContent    = ci.date || '—';
+  document.getElementById('cc-count').textContent   = ci.visitCount;
+  document.getElementById('cc-visits').textContent  = 1;
+  document.getElementById('city-card-backdrop').classList.add('open');
+  document.getElementById('city-card-wrap').classList.add('open');
+}
+function closeCityCard() {
+  document.getElementById('city-card-backdrop').classList.remove('open');
+  document.getElementById('city-card-wrap').classList.remove('open');
+}
+function cityCardViewMemories() {
+  closeCityCard();
+  if (curCity && curCountry) drillCity(curCity);
+}
+
 /* ── Capture ───────────────────────────────────────────────── */
 function openCapture() {
   document.getElementById('tag-sheet').classList.remove('open');
@@ -1259,8 +1867,9 @@ function toast(msg, icon) {
 
   /* ── Visited country IDs (ISO 3166-1 numeric) ──────────────── */
   /* Edit VISITED_IDS to highlight different countries           */
-  const VISITED_IDS       = [392, 250, 380, 36]; // Japan, France, Italy, Australia
-  const COUNTRY_KEY_TO_ID = { japan:392, france:250, italy:380, australia:36 };
+  // ISO Alpha-3 codes for the countries source-layer in demotiles vector tiles.
+  // Using the same source as the base border lines guarantees pixel-perfect alignment.
+  const COUNTRY_KEY_TO_A3 = { japan:'JPN', france:'FRA', italy:'ITA', australia:'AUS' };
 
   /* ── Fly-to targets ─────────────────────────────────────────── */
   const COUNTRY_TARGETS = {
@@ -1314,123 +1923,464 @@ function toast(msg, icon) {
     keyboard:           false,
   });
 
-  /* ── Markers ─────────────────────────────────────────────────── */
-  let countryMarkers = [], cityMarkers = [];
-
-  function makePinEl(emoji, label, count, cls, feat) {
-    const el = document.createElement('div');
-    el.className = cls;
-    if (feat !== undefined) el.dataset.feat = feat ? 'true' : 'false';
-    el.innerHTML =
-      `<div class="map-pin-bubble">${emoji}</div>` +
-      `<div class="map-pin-tail"></div>` +
-      `<div class="map-pin-lbl">${label} <span>· ${count}</span></div>`;
-    return el;
+  /* ── Auto-resize: keep MapLibre canvas in sync with its container ─────
+     MapLibre calculates marker pixel positions from the container's
+     getBoundingClientRect(). Any time the container changes size — iOS URL-bar
+     show/hide, orientation flip, safe-area change — the canvas goes stale and
+     markers visually drift from their lat/lng anchors. ResizeObserver fires
+     immediately on any size change and triggers a recalculation. ────────── */
+  const _mapElForResize = document.getElementById('map-el');
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => {
+      // Only resize when the map is actually visible (avoids no-op redraws)
+      if (document.getElementById('view-world').style.display !== 'none') {
+        map.resize();
+      }
+    }).observe(_mapElForResize);
+  } else {
+    // Fallback for browsers without ResizeObserver
+    window.addEventListener('resize', () => map.resize());
+    // Also catch iOS visual-viewport changes (URL bar, keyboard)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => map.resize());
+    }
   }
 
+  /* ── Zoom thresholds ──────────────────────────────────────────── */
   const ZOOM_CITY_THR   = 4.0;
   const ZOOM_DETAIL_THR = 6.0;
 
-  function updatePins() {
-    const z = map.getZoom();
-    const showCity = z >= ZOOM_CITY_THR;
-    const showAll  = z >= ZOOM_DETAIL_THR;
-    countryMarkers.forEach(({ el }) => el.classList.toggle('pin-hide', showCity));
-    cityMarkers.forEach(({ pin, el }) => {
-      el.classList.toggle('pin-show', showCity && (showAll || pin.feat));
+  /* ── GeoJSON pin layers ────────────────────────────────────────
+     All check-in points are rendered as native WebGL symbol/circle
+     layers bound to their lng/lat. They are part of the map canvas
+     and can never drift from geographic coordinates during pan, zoom,
+     scroll, or any viewport shift. No DOM marker elements are used.  */
+  function addPinLayers() {
+    const dpr = window.devicePixelRatio || 1;
+
+    // Draw a white circle with a terracotta border and an emoji centred inside,
+    // then register it as a named map image so symbol layers can reference it.
+    // map.addImage() requires ImageData (not HTMLCanvasElement), so we read
+    // pixels back from the canvas with getImageData() before registering.
+    function addPinImage(id, emoji, size) {
+      const s = Math.round(size * dpr);
+      const cv = document.createElement('canvas');
+      cv.width = s; cv.height = s;
+      const ctx = cv.getContext('2d');
+      const cx = s / 2, cy = s / 2, r = s / 2 - Math.ceil(dpr * 2);
+      // White fill
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff'; ctx.fill();
+      // Terracotta border
+      ctx.strokeStyle = '#c07a4f';
+      ctx.lineWidth   = Math.ceil(2 * dpr);
+      ctx.stroke();
+      // Emoji centred inside the circle (emoji ignore fillStyle — system color font)
+      ctx.font = `${Math.round(r * 0.90)}px serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(emoji, cx, cy);
+      // Read pixels as ImageData — the format MapLibre's addImage() accepts
+      const imgData = ctx.getImageData(0, 0, s, s);
+      if (map.hasImage(id)) map.removeImage(id);
+      map.addImage(id, imgData, { pixelRatio: dpr });
+    }
+
+    COUNTRY_PINS.forEach(p => addPinImage(`cpin-${p.key}`, p.emoji, 40));
+    CITY_PINS.forEach(p  => addPinImage(`cipin-${p.id}`,  p.emoji, 32));
+
+    // ── Sources ──────────────────────────────────────────────────
+    map.addSource('country-pins-src', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: COUNTRY_PINS.map(p => {
+          const prog = getCountryProgress(p.key);
+          return {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: p.lngLat },
+            properties: {
+              key: p.key, label: p.label, img: `cpin-${p.key}`,
+              state: prog.state,
+              unlockedCount: prog.unlockedCount,
+              requiredCount: prog.requiredCount,
+            }
+          };
+        })
+      }
+    });
+
+    // Only render pins for cities the user has actually checked in to
+    map.addSource('city-pins-src', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: CITY_PINS
+          .filter(p => CITY_CHECKINS[p.id]?.checkedIn)
+          .map(p => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: p.lngLat },
+            properties: {
+              id: p.id, country: p.country, name: p.name,
+              count: p.count, img: `cipin-${p.id}`, emoji: p.emoji
+            }
+          }))
+      }
+    });
+
+    // Empty initially; updated by initGeolocation() when position is known
+    map.addSource('user-loc-src', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] }
+    });
+
+    // ── Layers ───────────────────────────────────────────────────
+    // Country pins: visible at low zoom, fade out as city pins fade in
+    map.addLayer({
+      id: 'country-pins', type: 'symbol', source: 'country-pins-src',
+      layout: {
+        'icon-image':            ['get', 'img'],
+        'icon-size':             1,
+        'icon-anchor':           'center',
+        'icon-allow-overlap':    true,
+        'icon-ignore-placement': true,
+        'text-field': ['concat',
+          ['get', 'label'], ' · ',
+          ['to-string', ['get', 'unlockedCount']], '/',
+          ['to-string', ['get', 'requiredCount']]
+        ],
+        'text-size':             10,
+        'text-font':             ['Noto Sans Bold'],
+        'text-anchor':           'top',
+        'text-offset':           [0, 1.4],
+        'text-allow-overlap':    true,
+        'text-ignore-placement': true,
+        'text-optional':         true,
+      },
+      paint: {
+        'text-color':      '#ffffff',
+        'text-halo-color': 'rgba(30,18,8,0.78)',
+        'text-halo-width': 2.5,
+        'icon-opacity': ['interpolate', ['linear'], ['zoom'],
+          ZOOM_CITY_THR - 0.5, 1, ZOOM_CITY_THR + 0.5, 0],
+        'text-opacity': ['interpolate', ['linear'], ['zoom'],
+          ZOOM_CITY_THR - 0.5, 1, ZOOM_CITY_THR + 0.5, 0],
+      }
+    });
+
+    // City pins: fade in as country pins fade out
+    map.addLayer({
+      id: 'city-pins', type: 'symbol', source: 'city-pins-src',
+      minzoom: ZOOM_CITY_THR - 0.5,
+      layout: {
+        'icon-image':            ['get', 'img'],
+        'icon-size':             0.8,
+        'icon-anchor':           'center',
+        'icon-allow-overlap':    true,
+        'icon-ignore-placement': true,
+        'text-field':            ['concat', ['get', 'name'], ' · ', ['to-string', ['get', 'count']]],
+        'text-size':             9,
+        'text-font':             ['Noto Sans Bold'],
+        'text-anchor':           'top',
+        'text-offset':           [0, 1.2],
+        'text-allow-overlap':    true,
+        'text-ignore-placement': true,
+        'text-optional':         true,
+      },
+      paint: {
+        'text-color':      '#ffffff',
+        'text-halo-color': 'rgba(30,18,8,0.78)',
+        'text-halo-width': 2,
+        'icon-opacity': ['interpolate', ['linear'], ['zoom'],
+          ZOOM_CITY_THR - 0.5, 0, ZOOM_CITY_THR + 0.5, 1],
+        'text-opacity': ['interpolate', ['linear'], ['zoom'],
+          ZOOM_CITY_THR - 0.5, 0, ZOOM_CITY_THR + 0.5, 1],
+      }
+    });
+
+    // User location: outer glow ring + solid dot, both as circle layers
+    map.addLayer({
+      id: 'user-loc-ring', type: 'circle', source: 'user-loc-src',
+      paint: {
+        'circle-radius': 13,
+        'circle-color':  'rgba(192,122,79,0.18)',
+        'circle-pitch-alignment': 'map',
+      }
+    });
+    map.addLayer({
+      id: 'user-loc-dot', type: 'circle', source: 'user-loc-src',
+      paint: {
+        'circle-radius':       6,
+        'circle-color':        '#c07a4f',
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 2,
+        'circle-pitch-alignment': 'map',
+      }
+    });
+
+    // ── Click handlers ───────────────────────────────────────────
+    map.on('click', 'country-pins', e => {
+      if (!e.features.length) return;
+      zoomToCountry(e.features[0].properties.key);
+    });
+    map.on('click', 'city-pins', e => {
+      if (!e.features.length) return;
+      const p = e.features[0].properties;
+      curCountry = p.country;
+      curCity    = p.id;
+      showCityCard(p.id, p.country, p.name, p.emoji);
+    });
+    ['country-pins', 'city-pins'].forEach(id => {
+      map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
     });
   }
 
-  function initMarkers() {
-    COUNTRY_PINS.forEach(pin => {
-      const el = makePinEl(pin.emoji, pin.label, pin.count, 'map-pin country-pin');
-      el.addEventListener('click', () => zoomToCountry(pin.key));
-      const m = new maplibregl.Marker({ element:el, anchor:'bottom' })
-        .setLngLat(pin.lngLat).addTo(map);
-      countryMarkers.push({ pin, marker:m, el });
-    });
+  /* ── Geolocation ────────────────────────────────────────────── */
+  function makeCircleGeoJSON(center, radiusKm) {
+    const [lng, lat] = center;
+    const coords = [];
+    for (let i = 0; i <= 64; i++) {
+      const angle = (i / 64) * 2 * Math.PI;
+      const dLat = (radiusKm / 6371) * (180 / Math.PI) * Math.sin(angle);
+      const dLng = (radiusKm / 6371) * (180 / Math.PI) * Math.cos(angle) / Math.cos(lat * Math.PI / 180);
+      coords.push([lng + dLng, lat + dLat]);
+    }
+    return { type:'Feature', geometry:{ type:'Polygon', coordinates:[coords] } };
+  }
 
-    CITY_PINS.forEach(pin => {
-      const el = makePinEl(pin.emoji, pin.name, pin.count, 'map-pin city-pin', pin.feat);
-      el.addEventListener('click', () => { curCountry = pin.country; drillCity(pin.id); });
-      const m = new maplibregl.Marker({ element:el, anchor:'bottom' })
-        .setLngLat(pin.lngLat).addTo(map);
-      cityMarkers.push({ pin, marker:m, el });
-    });
+  function updateCaptureLocation(label, country) {
+    const locTag = document.querySelector('.cap-loc-tag');
+    if (locTag) locTag.innerHTML = `<div class="cap-loc-dot"></div>${label}`;
+    const tags = document.querySelectorAll('.cap-autotags .cap-tag');
+    if (tags[0]) tags[0].innerHTML = `<span>📍</span>${label}`;
+    if (tags[1] && country) tags[1].innerHTML = `<span>🌏</span>${country}`;
+    const ciStrong = document.querySelector('.cap-ci-loc-text strong');
+    if (ciStrong) ciStrong.textContent = label;
+  }
 
-    // "You are here" beacon — Kyoto
-    const locEl = document.createElement('div');
-    locEl.className = 'my-loc';
-    locEl.innerHTML = `<div class="my-loc-ring"><div class="my-loc-dot"></div></div>`;
-    new maplibregl.Marker({ element:locEl, anchor:'center' })
-      .setLngLat([135.77, 35.01]).addTo(map);
+  function initGeolocation() {
+    if (!navigator.geolocation) return;
+    const geoStrong = document.querySelector('#geo-prompt .geo-txt strong');
+    const geoSpan   = document.querySelector('#geo-prompt .geo-txt span');
+    if (geoStrong) geoStrong.textContent = 'Detecting location…';
+    if (geoSpan)   geoSpan.textContent   = 'Finding your position';
+
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        const lng = pos.coords.longitude;
+        const lat = pos.coords.latitude;
+
+        // Move beacon to real location (GeoJSON source update — no DOM marker)
+        const locSrc = map.getSource('user-loc-src');
+        if (locSrc) locSrc.setData({
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: {} }]
+        });
+
+        // Fly to user location — zoom 10 shows ~65 km wide, fitting a 15 km radius with context
+        map.flyTo({ center:[lng, lat], zoom:10, duration:1400, essential:true });
+
+        // Draw 15 km radius circle
+        const circleGeo = makeCircleGeoJSON([lng, lat], 15);
+        if (map.getSource('user-radius')) {
+          map.getSource('user-radius').setData(circleGeo);
+        } else {
+          map.addSource('user-radius', { type:'geojson', data:circleGeo });
+          map.addLayer({ id:'radius-fill', type:'fill', source:'user-radius',
+            paint:{ 'fill-color':'#c07a4f', 'fill-opacity':0.07 } });
+          map.addLayer({ id:'radius-border', type:'line', source:'user-radius',
+            paint:{ 'line-color':'#c07a4f', 'line-width':1.5,
+                    'line-opacity':0.5, 'line-dasharray':[4,3] } });
+        }
+
+        // Reverse geocode with Nominatim
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`)
+          .then(r => r.json())
+          .then(data => {
+            const addr    = data.address || {};
+            const city    = addr.city || addr.town || addr.village || addr.county || 'Your Location';
+            const country = addr.country || '';
+            const label   = city + (country ? ', ' + country : '');
+            if (geoStrong) geoStrong.textContent = label;
+            if (geoSpan)   geoSpan.textContent   = 'Good time to save a moment';
+            updateCaptureLocation(label, country);
+          })
+          .catch(() => {
+            const label = `${lat.toFixed(2)}°, ${lng.toFixed(2)}°`;
+            if (geoStrong) geoStrong.textContent = label;
+            if (geoSpan)   geoSpan.textContent   = 'Good time to save a moment';
+            updateCaptureLocation(label, '');
+          });
+      },
+      function() {
+        if (geoStrong) geoStrong.textContent = 'Location unavailable';
+        if (geoSpan)   geoSpan.textContent   = 'Enable location for a personalised view';
+      },
+      { enableHighAccuracy:true, timeout:12000, maximumAge:0 }
+    );
   }
 
   /* ── Map layers ─────────────────────────────────────────────── */
   map.on('load', async () => {
 
-    // ── Restyle demotiles layers to match the warm Travel Magnet palette ──
-    // The demotiles style renders all countries/borders correctly (including
-    // antimeridian-crossing land like Russia and Alaska) — we just recolour.
+    // ── Restyle demotiles base layers ────────────────────────────
+    // The demotiles vector tiles handle antimeridian-crossing countries
+    // (Russia, Alaska, etc.) correctly at the tile level — so we let them
+    // render the base land and coastlines, just recoloured to match our palette.
+    // We only overlay custom GeoJSON for visited-country highlights (those four
+    // countries don't cross the antimeridian so they render without artifacts).
     map.getStyle().layers.forEach(layer => {
       try {
         if (layer.type === 'background') {
-          map.setPaintProperty(layer.id, 'background-color', '#d4e2eb');
+          map.setPaintProperty(layer.id, 'background-color', '#7aafc4');
         } else if (layer.type === 'fill') {
-          map.setPaintProperty(layer.id, 'fill-color', '#e2d9cc');
+          const sl = (layer['source-layer'] || layer.id).toLowerCase();
+          if (/water|ocean|sea|lake/.test(sl)) {
+            map.setPaintProperty(layer.id, 'fill-color', '#7aafc4');
+          } else {
+            // Pale warm cream — non-visited land recedes behind terracotta highlights
+            map.setPaintProperty(layer.id, 'fill-color', '#ede8dc');
+          }
         } else if (layer.type === 'line') {
-          map.setPaintProperty(layer.id, 'line-color', '#d4c4ad');
-          map.setPaintProperty(layer.id, 'line-width', 0.7);
-          map.setPaintProperty(layer.id, 'line-opacity', 0.8);
+          const sl   = (layer['source-layer'] || '').toLowerCase();
+          const lid  = layer.id.toLowerCase();
+          const hint = sl + ' ' + lid;
+
+          // Graticule / lat-lon grid → fully suppress (visual noise at top of map)
+          if (/geoline|graticule|grid/.test(hint)) {
+            map.setPaintProperty(layer.id, 'line-opacity', 0);
+
+          // State / province borders → fade in at zoom 5–6
+          } else if (/admin[_\-]?[1-4]|state|province|region/.test(hint)) {
+            map.setPaintProperty(layer.id, 'line-color', '#c8b89e');
+            map.setPaintProperty(layer.id, 'line-width', 0.6);
+            map.setPaintProperty(layer.id, 'line-opacity',
+              ['interpolate', ['linear'], ['zoom'], 4, 0, 6, 0.6]);
+
+          // City / local borders → fade in at zoom 8–9
+          } else if (/admin[_\-]?[5-9]|munic|county|district|locality/.test(hint)) {
+            map.setPaintProperty(layer.id, 'line-color', '#c8b89e');
+            map.setPaintProperty(layer.id, 'line-width', 0.45);
+            map.setPaintProperty(layer.id, 'line-opacity',
+              ['interpolate', ['linear'], ['zoom'], 7, 0, 9, 0.5]);
+
+          // Country borders + coastlines → always on, weight scales with zoom
+          } else {
+            map.setPaintProperty(layer.id, 'line-color', '#bfae94');
+            map.setPaintProperty(layer.id, 'line-width',
+              ['interpolate', ['linear'], ['zoom'], 0, 0.5, 10, 1.2]);
+            map.setPaintProperty(layer.id, 'line-opacity', 0.72);
+          }
         } else if (layer.type === 'symbol') {
           map.setLayoutProperty(layer.id, 'visibility', 'none');
         }
-      } catch (e) { /* some properties don't apply to every layer — safe to ignore */ }
+      } catch(e) { /* some properties don't apply to every layer type */ }
     });
 
-    // ── Visited + active country highlights ──────────────────────
-    // GeoJSON for the 4 visited countries only — none cross the antimeridian,
-    // so no rendering artifacts from this source.
+    // ── Visited-country highlights ────────────────────────────────
+    // Use the demotiles 'maplibre' vector source / 'countries' source-layer
+    // directly so fill and border share the exact same geometry — no dataset
+    // mismatch between a GeoJSON overlay and the tile border lines.
     try {
-      const resp  = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
-      const world = await resp.json();
-      const visitedGeo = {
-        type: 'FeatureCollection',
-        features: topojson.feature(world, world.objects.countries).features
-          .filter(f => VISITED_IDS.includes(+f.id))
-          .map(f => ({ ...f, properties:{ cid:+f.id } }))
-      };
+      const completedA3 = [], partialA3 = [];
+      Object.entries(COUNTRY_KEY_TO_A3).forEach(([key, a3]) => {
+        const prog = getCountryProgress(key);
+        if (prog.state === 'completed') completedA3.push(a3);
+        else if (prog.state === 'partial') partialA3.push(a3);
+      });
 
-      map.addSource('countries', { type:'geojson', data:visitedGeo });
+      // Completed countries: 40% terracotta fill
+      if (completedA3.length) {
+        map.addLayer({ id:'visited-fill-completed', type:'fill',
+          source:'maplibre', 'source-layer':'countries',
+          filter:['in', ['get','ADM0_A3'], ['literal', completedA3]],
+          paint:{ 'fill-color':'#c07a4f', 'fill-opacity':0.40 }
+        });
+        map.addLayer({ id:'visited-border-completed', type:'line',
+          source:'maplibre', 'source-layer':'countries',
+          filter:['in', ['get','ADM0_A3'], ['literal', completedA3]],
+          paint:{ 'line-color':'#a86030', 'line-width':1.8, 'line-opacity':0.88 }
+        });
+      }
+      // Partial countries: 18% amber fill
+      if (partialA3.length) {
+        map.addLayer({ id:'visited-fill-partial', type:'fill',
+          source:'maplibre', 'source-layer':'countries',
+          filter:['in', ['get','ADM0_A3'], ['literal', partialA3]],
+          paint:{ 'fill-color':'#d4a050', 'fill-opacity':0.18 }
+        });
+        map.addLayer({ id:'visited-border-partial', type:'line',
+          source:'maplibre', 'source-layer':'countries',
+          filter:['in', ['get','ADM0_A3'], ['literal', partialA3]],
+          paint:{ 'line-color':'#b89040', 'line-width':1.8, 'line-opacity':0.55 }
+        });
+      }
 
-      map.addLayer({ id:'visited-fill', type:'fill', source:'countries',
-        paint:{ 'fill-color':'#c07a4f', 'fill-opacity':0.22 } });
-
-      map.addLayer({ id:'visited-border', type:'line', source:'countries',
-        paint:{ 'line-color':'#c07a4f', 'line-width':1.5, 'line-opacity':0.6 } });
-
-      map.addLayer({ id:'active-fill', type:'fill', source:'countries',
-        filter:['==', ['get','cid'], -1],
-        paint:{ 'fill-color':'#c07a4f', 'fill-opacity':0.40 } });
-
-      map.addLayer({ id:'active-border', type:'line', source:'countries',
-        filter:['==', ['get','cid'], -1],
-        paint:{ 'line-color':'#c07a4f', 'line-width':2.5, 'line-opacity':0.85 } });
+      // Active-country highlight ring (set by zoomToCountry)
+      map.addLayer({ id:'active-fill', type:'fill',
+        source:'maplibre', 'source-layer':'countries',
+        filter:['==', ['get','ADM0_A3'], ''],
+        paint:{ 'fill-color':'#c07a4f', 'fill-opacity':0.55 }
+      });
+      map.addLayer({ id:'active-border', type:'line',
+        source:'maplibre', 'source-layer':'countries',
+        filter:['==', ['get','ADM0_A3'], ''],
+        paint:{ 'line-color':'#c07a4f', 'line-width':2.5, 'line-opacity':0.95 }
+      });
 
     } catch(e) {
-      console.warn('Travel Magnet: highlight data unavailable.', e);
+      console.warn('Travel Magnet: country highlight unavailable.', e);
     }
 
-    initMarkers();
-    updatePins();
-  });
+    // ── Admin-1 prefecture / state / province lines ──────────────
+    // Use OpenFreeMap planet tiles (free, no API key) as a secondary vector
+    // source. Its `boundary` source-layer carries admin_level=4 lines for
+    // every country in the world, including Japan, France, and Italy — the
+    // countries the Natural Earth 50m file was missing. We filter to only
+    // show borders inside visited countries so non-visited areas stay clean.
+    // OpenFreeMap boundary layer uses ISO-3 codes in adm0_l / adm0_r (same
+    // values as COUNTRY_KEY_TO_A3), so we reuse that map directly.
+    const visitedA3vals = Object.values(COUNTRY_KEY_TO_A3);
 
-  map.on('zoom', updatePins);
+    try {
+      map.addSource('ofm-src', {
+        type: 'vector',
+        url: 'https://tiles.openfreemap.org/planet'
+      });
+
+      // Prefecture / state borders — fade in as user zooms into a country.
+      // Filter on admin_level=4 only; omitting the adm0_l/adm0_r country
+      // filter because internal prefecture borders may carry null country
+      // codes. The high minzoom (4) keeps the view clean at world scale.
+      map.addLayer({
+        id: 'ofm-admin1',
+        type: 'line',
+        source: 'ofm-src',
+        'source-layer': 'boundary',
+        minzoom: 4,
+        filter: ['any',
+          ['==', ['get', 'admin_level'], 4],
+          ['==', ['get', 'admin_level'], '4']
+        ],
+        paint: {
+          'line-color': '#8a6040',
+          'line-width':   ['interpolate', ['linear'], ['zoom'], 4, 0.5, 6, 1.0, 10, 1.6],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 4, 0, 5, 0.5, 6, 0.8],
+          'line-dasharray': [5, 4]
+        }
+      });
+    } catch(e) {
+      console.warn('Travel Magnet: admin-1 data unavailable.', e);
+    }
+
+    addPinLayers();
+    initGeolocation();
+  });
 
   /* ── Public API ──────────────────────────────────────────────── */
   window._syncMapPins = function () {
-    map.resize();   // recalculate canvas size after container was hidden
-    updatePins();
+    map.resize();
+    requestAnimationFrame(() => map.resize());
   };
 
   window.mapZoom = function (delta) {
@@ -1442,10 +2392,10 @@ function toast(msg, icon) {
     const t = COUNTRY_TARGETS[key];
     if (!t) return;
     map.flyTo({ center:t.center, zoom:t.zoom, duration:700, essential:true });
-    const id = COUNTRY_KEY_TO_ID[key] ?? -1;
+    const a3 = COUNTRY_KEY_TO_A3[key] ?? '';
     if (map.getLayer('active-fill')) {
-      map.setFilter('active-fill',   ['==', ['get','cid'], id]);
-      map.setFilter('active-border', ['==', ['get','cid'], id]);
+      map.setFilter('active-fill',   ['==', ['get','ADM0_A3'], a3]);
+      map.setFilter('active-border', ['==', ['get','ADM0_A3'], a3]);
     }
   };
 
@@ -1453,11 +2403,22 @@ function toast(msg, icon) {
 
 /* ── Boot ──────────────────────────────────────────────────── */
 setBreadcrumb();
-setMapLevel('world'); // apply map-mode class on start
+setMapLevel('world');
+updateWorldStats();
+renderExplorePosts();
+renderWishlist();
 setTimeout(()=>{
   const p=document.getElementById('geo-prompt');
   if(p){p.style.transition='opacity .5s';p.style.opacity='0';setTimeout(()=>p.style.display='none',500);}
 },8000);
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>

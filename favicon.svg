@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <radialGradient id="g" cx="38%" cy="32%" r="60%">
+      <stop offset="0%" stop-color="#d4956d"/>
+      <stop offset="100%" stop-color="#a86030"/>
+    </radialGradient>
+  </defs>
+  <!-- Pin body -->
+  <path d="M16 2C10.477 2 6 6.477 6 12c0 4.418 2.865 8.166 6.857 9.653L16 30l3.143-8.347C23.135 20.166 26 16.418 26 12c0-5.523-4.477-10-10-10z" fill="url(#g)"/>
+  <!-- Inner dot / highlight -->
+  <circle cx="16" cy="12" r="3.8" fill="rgba(255,255,255,0.55)"/>
+</svg>

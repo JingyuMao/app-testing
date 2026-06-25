@@ -1,0 +1,20 @@
+{
+  "name": "Travel Magnet",
+  "short_name": "Travel Magnet",
+  "description": "Capture travel memories on an interactive map. Pin moments like fridge magnets — food, places, cafés, experiences.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f0e8",
+  "theme_color": "#c07a4f",
+  "categories": ["travel", "lifestyle"],
+  "lang": "en",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
